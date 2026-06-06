@@ -1,0 +1,5 @@
+build/
+node_modules/
+.lock-waf_*
+.claude/settings.local.json
+.DS_Store

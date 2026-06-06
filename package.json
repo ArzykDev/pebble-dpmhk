@@ -1,0 +1,66 @@
+{
+  "name": "pebble-dpmhk",
+  "author": "arzyk <hello@arzyk.me>",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {
+    "@rebble/clay": "^1.0.10"
+  },
+  "pebble": {
+    "displayName": "MHD HK",
+    "uuid": "cb2f52d0-7663-4487-b9e0-9830cce42f5a",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "capabilities": [
+      "location",
+      "configurable"
+    ],
+    "messageKeys": [
+      "REQUEST_ID",
+      "OP",
+      "STOP_ID",
+      "META_STOP_NAME",
+      "META_FLAGS",
+      "META_FETCHED_AT",
+      "META_COUNT",
+      "ERROR",
+      "ROW_INDEX",
+      "ROW_LINE",
+      "ROW_DEST",
+      "ROW_TIME",
+      "ROW_DELAY",
+      "ROW_META",
+      "FAV_1",
+      "FAV_2",
+      "FAV_3",
+      "FAV_4",
+      "FAV_5",
+      "FAV_6"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu-icon.png",
+          "menuIcon": true
+        }
+      ]
+    }
+  }
+}

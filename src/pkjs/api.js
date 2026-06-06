@@ -1,0 +1,88 @@
+// api.dpmhk.cz client — the ONLY file that knows the DPMHK API contracts.
+// Undocumented official backend (dpmhk.cz "Spoje-vyhledavac" plugin).
+// Gotchas: datum is DD_MM_YYYY with underscores; linka is space-padded.
+
+var BASE_URL = 'https://api.dpmhk.cz';
+var TIMEOUT_MS = 8000;
+
+// Error types map to the ERR codes in appmsg.js / model.h
+function request(method, path, body, cb) {
+  var xhr = new XMLHttpRequest();
+  xhr.open(method, BASE_URL + path);
+  xhr.timeout = TIMEOUT_MS;
+  if (body) {
+    xhr.setRequestHeader('Content-Type', 'application/json');
+  }
+  xhr.onload = function () {
+    if (xhr.status !== 200) {
+      cb({ type: 'api', status: xhr.status });
+      return;
+    }
+    var parsed;
+    try {
+      parsed = JSON.parse(xhr.responseText);
+    } catch (err) {
+      cb({ type: 'parse' });
+      return;
+    }
+    cb(null, parsed);
+  };
+  xhr.ontimeout = function () {
+    cb({ type: 'network' });
+  };
+  xhr.onerror = function () {
+    cb({ type: 'network' });
+  };
+  xhr.send(body ? JSON.stringify(body) : null);
+}
+
+// cb(err, [{packet:"185", from:"2026-06-01", to:"2026-06-08"}, ...])
+function getPackets(cb) {
+  request('GET', '/packet', null, cb);
+}
+
+// cb(err, [{id, name, lat, lng, linky:[]}, ...])  (~204 stops, ~46 KB)
+function getStations(packet, cb) {
+  request('POST', '/stations', { packet: String(packet) }, cb);
+}
+
+// datum must be DD_MM_YYYY (underscores!).
+// cb(err, [{line, dest, time, delay}, ...]) — normalized, linka trimmed,
+// delay in seconds or null when the API has no realtime match.
+function getDepartures(packet, stopId, datum, cb) {
+  var body = {
+    packet: String(packet),
+    zastavka: String(stopId),
+    datum: datum,
+  };
+  request('POST', '/odjezd', body, function (err, rows) {
+    if (err) {
+      cb(err);
+      return;
+    }
+    if (!Array.isArray(rows)) {
+      cb({ type: 'parse' });
+      return;
+    }
+    var items = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!r || typeof r.linka !== 'string' || typeof r.odjezd !== 'string') {
+        continue; // parse defensively — API is undocumented
+      }
+      items.push({
+        line: r.linka.trim(),
+        dest: typeof r.smer === 'string' ? r.smer : '',
+        time: r.odjezd,
+        delay: typeof r.delay_seconds === 'number' ? r.delay_seconds : null,
+      });
+    }
+    cb(null, items);
+  });
+}
+
+module.exports = {
+  getPackets: getPackets,
+  getStations: getStations,
+  getDepartures: getDepartures,
+};
