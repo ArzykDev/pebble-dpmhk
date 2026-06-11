@@ -28,6 +28,21 @@ so "nearest stops" rank against your IP location, not HK.
 Do NOT use `pebble emu-bt-connection --connected no` to test offline — it cuts
 pebble-tool's own control socket and you must `pebble kill` to recover.
 
+## CI & releasing
+
+GitHub Actions (`.github/workflows/pebble.yml`) builds all 7 platforms on every
+PR and push to `main` — a compile gate only (no test suite). `make build` wraps
+`pebble build`; on the Fedora host pass the box:
+`make build PEBBLE="distrobox enter ubuntu -- pebble"`.
+
+Versioning is SemVer `MAJOR.MINOR.PATCH`, kept in `package.json` `version` and
+surfaced as the `.pbw` `versionLabel` (all three parts are preserved).
+PATCH = fixes/strings, MINOR = new feature, MAJOR = redesign or a change that
+breaks persisted state or the AppMessage contract. Releases are deliberate, not
+per-commit: bump `version`, commit (`chore(release): vX.Y.Z`), then push tag
+`vX.Y.Z`. The tag must equal `version` (CI enforces); the tagged build publishes
+a GitHub Release with the `.pbw` attached.
+
 ## Platforms
 
 `aplite basalt chalk diorite emery flint gabbro`. Constraints: aplite = 24 KB
@@ -120,6 +135,8 @@ constructor — `new Clay([])` renders an empty page).
 - C: SDK style — `prv_` static functions, `s_` statics, 2-space indent.
 - JS: classic PKJS — XHR only (no fetch), no localeCompare, no Promises.
 - Czech strings only in `strings.h` (C) — never inline in windows.
+- SDK docs: trust `developer.repebble.com` over the older `developer.rebble.io`
+  — the latter still carries stale pre-repebble guidance.
 - Commits: Conventional Commits (feat:, fix:, chore:, ...), 50/72, plain text
   (no markdown in messages).
 - Do not touch: `build/` (generated), `wscript` (works as-is).

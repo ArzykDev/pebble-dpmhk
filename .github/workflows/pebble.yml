@@ -1,0 +1,94 @@
+name: Build
+
+# Compile gate: builds the .pbw for all targetPlatforms on every PR and push to
+# main. There is no test suite, so this verifies the app compiles everywhere
+# (catches aplite RAM and round-display breakage that is easy to miss locally).
+# Pushing a v* tag additionally publishes the .pbw as a GitHub Release.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # write is only exercised by the tag-gated release step below; PR and
+    # branch builds never reach it.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # On a release tag, fail fast unless v<tag> matches package.json's version
+      # and that version is MAJOR.MINOR.PATCH. Keeps the git tag, the npm
+      # version and the .pbw versionLabel from drifting apart.
+      - name: Verify tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(jq -r .version package.json)"
+          if ! printf '%s' "$pkg" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::package.json version '$pkg' is not MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag v$tag does not match package.json version $pkg"
+            exit 1
+          fi
+          echo "Releasing v$pkg"
+
+      # libpng/freetype are needed by the resource step (PNG menu icon, fonts).
+      # The heavier SDL/glib/pixman deps are emulator-only and not needed here.
+      - name: Install native build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfreetype6 libpng16-16
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # @rebble/clay is require()d in src/pkjs/index.js; multiJS bundles it at
+      # build time, so node_modules must exist before `pebble build`.
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+
+      - name: Install pebble-tool
+        run: |
+          uv tool install pebble-tool --python 3.13
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # ~/.local/share/pebble-sdk holds the SDK core, arm toolchain and QEMU
+      # (~1.6 G). Cache it so runs after the first stay fast. Bump the key
+      # suffix to force a refresh onto a newer SDK.
+      - name: Cache Pebble SDK
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pebble-sdk
+          key: pebble-sdk-${{ runner.os }}-v1
+
+      - name: Install Pebble SDK
+        run: pebble sdk install latest
+
+      - name: Build
+        run: pebble build
+
+      - name: Upload .pbw
+        uses: actions/upload-artifact@v4
+        with:
+          name: pebble-app
+          path: build/*.pbw
+          if-no-files-found: error
+
+      - name: Publish release on tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: build/*.pbw
+          generate_release_notes: true
