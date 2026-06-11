@@ -26,6 +26,19 @@ static void prv_notify_stops(void) {
   }
 }
 
+// Live data couldn't be delivered: show the persisted last board (with the
+// Offline badge), or mark the board with fallback_error when none is stored
+// for this stop. Shared by the send-failure and phone-reported-error paths.
+static void prv_departures_offline_fallback(uint8_t fallback_error) {
+  DepartureBoard *board = model_board();
+  board->loading = false;
+  if (!persist_load_board(board->stop_id)) {
+    board->count = 0;
+    board->error = fallback_error;
+  }
+  prv_notify_board();
+}
+
 static void prv_copy_tuple_str(DictionaryIterator *iter, uint32_t key,
                                char *dest, size_t size) {
   Tuple *t = dict_find(iter, key);
@@ -41,18 +54,18 @@ static void prv_handle_departures_header(DictionaryIterator *iter,
   Tuple *error = dict_find(iter, MESSAGE_KEY_ERROR);
   Tuple *flags = dict_find(iter, MESSAGE_KEY_META_FLAGS);
 
-  // Phone reached us but couldn't fetch: fall back to the persisted last board
-  // (shown with the Offline badge), mirroring the Bluetooth-down path. Only
-  // surface the bare error when no board is stored for this stop.
+  // Phone reached us but the live fetch failed: fall back to the persisted last
+  // board, preserving the reported error code for when none is stored. Mirrors
+  // the Bluetooth-down path (which falls back with ERR_NETWORK instead).
   uint8_t err = error ? error->value->uint8 : ERR_NONE;
-  if (err != ERR_NONE && persist_load_board(board->stop_id)) {
-    prv_notify_board();
+  if (err != ERR_NONE) {
+    prv_departures_offline_fallback(err);
     return;
   }
 
   board->count = 0;
   board->expected = count ? count->value->uint8 : 0;
-  board->error = err;
+  board->error = ERR_NONE;
   board->flags = flags ? flags->value->uint8 : 0;
   prv_copy_tuple_str(iter, MESSAGE_KEY_META_STOP_NAME, board->stop_name,
                      NAME_LEN);
@@ -197,14 +210,10 @@ static void prv_inbox_dropped(AppMessageResult reason, void *context) {
   APP_LOG(APP_LOG_LEVEL_ERROR, "inbox dropped: %d", (int)reason);
 }
 
-// Phone unreachable — fall back to the persisted last board if it matches
+// Phone unreachable (Bluetooth down) — fall back to the persisted last board,
+// or report a network error when none is stored.
 static void prv_departures_send_failed(void) {
-  DepartureBoard *board = model_board();
-  board->loading = false;
-  if (!persist_load_board(board->stop_id)) {
-    board->error = ERR_NETWORK;
-  }
-  prv_notify_board();
+  prv_departures_offline_fallback(ERR_NETWORK);
 }
 
 static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason,

@@ -18,9 +18,6 @@ var ERR = {
   GPS: 5,
 };
 
-var FLAG_CACHED = 1;
-var FLAG_STALE = 2;
-
 var DELAY_UNKNOWN = -32768;
 
 // Map an api.js error object to a protocol ERR code
@@ -131,8 +128,6 @@ function sendStops(requestId, op, stops, error) {
 module.exports = {
   OP: OP,
   ERR: ERR,
-  FLAG_CACHED: FLAG_CACHED,
-  FLAG_STALE: FLAG_STALE,
   errCode: errCode,
   sendDepartures: sendDepartures,
   sendDeparturesError: sendDeparturesError,
