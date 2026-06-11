@@ -139,4 +139,8 @@ constructor — `new Clay([])` renders an empty page).
   — the latter still carries stale pre-repebble guidance.
 - Commits: Conventional Commits (feat:, fix:, chore:, ...), 50/72, plain text
   (no markdown in messages).
+- Agent-filed GitHub issues: add the `claude` label and a
+  `🤖 Drafted by Claude Code` footer. `gh` authenticates as the repo owner, so
+  the issue is attributed to the user regardless — the label/footer is the only
+  marker distinguishing agent-drafted issues from the owner's own.
 - Do not touch: `build/` (generated), `wscript` (works as-is).
