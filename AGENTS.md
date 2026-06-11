@@ -74,7 +74,9 @@ src/pkjs/date.js       DD_MM_YYYY datum, packet pick by range
 
 ## AppMessage protocol
 
-Request (watch→JS): `{OP, REQUEST_ID, STOP_ID?}`. OPs: 1=GET_DEPARTURES,
+Request (watch→JS): `{OP, REQUEST_ID, STOP_ID?, META_STOP_NAME?}`
+(GET_DEPARTURES sends META_STOP_NAME so the phone re-resolves the
+packet-scoped stop id by name — see Caching). OPs: 1=GET_DEPARTURES,
 2=GET_NEAREST, 4=FAVORITES (JS→watch push, REQUEST_ID=0), 5=ADD_FAVORITE,
 6=REMOVE_FAVORITE (watch long-press; JS answers with an OP=4 push).
 OPs 5/6 are fire-and-forget: sent with REQUEST_ID=0 and they must NOT bump

@@ -17,27 +17,78 @@ function pushFavoritesToWatch(favorites) {
   appmsg.sendStops(0, appmsg.OP.FAVORITES, favorites);
 }
 
+// Map folded stop name -> station for the current packet. Stop ids are
+// packet-scoped (the weekly /packet reassigns them), so the folded name is the
+// stable key used everywhere a stored id must be re-resolved to its live id.
+function indexByFoldedName(stations) {
+  var byName = {};
+  stations.forEach(function (s) {
+    byName[util.foldName(s.name)] = s;
+  });
+  return byName;
+}
+
+// Re-resolve each favorite's (ephemeral) id by its stable name against the
+// current packet's list. Entries whose name vanished are kept untouched.
+function remapFavorites(favorites, stations) {
+  var byName = indexByFoldedName(stations);
+  return favorites.map(function (f) {
+    var match = byName[util.foldName(f.name)];
+    return match ? { id: String(match.id), name: match.name } : f;
+  });
+}
+
+// Resolve which stop a departures request should fetch. The watch sends the
+// favorite's saved id plus its name; since ids are packet-scoped we trust the
+// (stable) name and map it to the current packet's id, so a tap is correct
+// even before the favorites mirror has been refreshed. Falls back to the sent
+// id when no name travels (older watch build) or the name can't be matched.
+function resolveStopId(sentId, stopName, cb) {
+  if (!stopName) {
+    cb(sentId);
+    return;
+  }
+  cache.getStations(function (err, stations) {
+    if (err) {
+      cb(sentId);
+      return;
+    }
+    var match = indexByFoldedName(stations)[util.foldName(stopName)];
+    cb(match ? String(match.id) : sentId);
+  });
+}
+
 Pebble.addEventListener('ready', function () {
   console.log('PKJS ready');
-  // Warm the stations cache (no-op when the weekly packet is unchanged)
+  // Warm the stations cache (refetches only when the weekly packet changed)
   cache.getStations(function (err, stations) {
     if (err) {
       console.log('stations warmup failed: ' + JSON.stringify(err));
-    } else {
-      console.log('stations cached: ' + stations.length);
+      return;
     }
+    console.log('stations cached: ' + stations.length);
+    // Refresh favorites' (ephemeral) ids and push the corrected mirror so
+    // taps always hit the right stop after a weekly packet rollover.
+    var refreshed = remapFavorites(cache.getFavorites(), stations);
+    cache.setFavorites(refreshed);
+    pushFavoritesToWatch(refreshed);
   });
 });
 
 Pebble.addEventListener('appmessage', function (e) {
   var p = e.payload;
   console.log('request op=' + p.OP + ' req=' + p.REQUEST_ID +
-              (p.STOP_ID ? ' stop=' + p.STOP_ID : ''));
+              (p.STOP_ID ? ' stop=' + p.STOP_ID : '') +
+              (p.META_STOP_NAME ? ' name=' + p.META_STOP_NAME : ''));
 
   if (p.OP === appmsg.OP.GET_DEPARTURES) {
-    var stopId = String(p.STOP_ID);
-    // Stale-while-revalidate: paint cached board instantly, then live update
-    var cached = cache.getDepartures(stopId);
+    var sentId = String(p.STOP_ID);
+    var stopName = p.META_STOP_NAME ? String(p.META_STOP_NAME) : null;
+    // Stale-while-revalidate: paint cached board instantly, then live update.
+    // Keyed by the id the watch sent; the dep cache is wiped on a packet
+    // change, so a now-stale favorite id yields no paint (never a wrong
+    // board) instead of another stop's departures.
+    var cached = cache.getDepartures(sentId);
     var painted = !!(cached && cached.items && cached.items.length);
     if (painted) {
       appmsg.sendDepartures(p.REQUEST_ID, null, cached.items, {
@@ -45,19 +96,23 @@ Pebble.addEventListener('appmessage', function (e) {
         flags: appmsg.FLAG_CACHED | appmsg.FLAG_STALE,
       });
     }
-    departures.fetch(stopId, function (err, items, fetchedAt) {
-      if (err) {
-        // Keep a painted cached board on screen rather than wiping it with
-        // an error — but if nothing was painted, the watch is waiting and
-        // MUST get a reply or it stays on "Načítám..." forever
-        if (!painted) {
-          appmsg.sendDeparturesError(p.REQUEST_ID, err);
+    // Live fetch against the current packet: re-resolve by name so a favorite
+    // whose id shifted with the weekly packet still hits the right stop.
+    resolveStopId(sentId, stopName, function (liveId) {
+      departures.fetch(liveId, function (err, items, fetchedAt) {
+        if (err) {
+          // Keep a painted cached board on screen rather than wiping it with
+          // an error — but if nothing was painted, the watch is waiting and
+          // MUST get a reply or it stays on "Načítám..." forever
+          if (!painted) {
+            appmsg.sendDeparturesError(p.REQUEST_ID, err);
+          }
+          return;
         }
-        return;
-      }
-      cache.setDepartures(stopId, items, fetchedAt, Date.now());
-      appmsg.sendDepartures(p.REQUEST_ID, null, items, {
-        fetchedAt: fetchedAt,
+        cache.setDepartures(liveId, items, fetchedAt, Date.now());
+        appmsg.sendDepartures(p.REQUEST_ID, null, items, {
+          fetchedAt: fetchedAt,
+        });
       });
     });
   } else if (p.OP === appmsg.OP.GET_NEAREST) {
@@ -124,10 +179,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   }
 
   cache.getStations(function (err2, stations) {
-    var byName = {};
-    (err2 ? [] : stations).forEach(function (s) {
-      byName[util.foldName(s.name)] = s;
-    });
+    var byName = indexByFoldedName(err2 ? [] : stations);
 
     var favorites = [];
     for (var i = 1; i <= config.SLOT_COUNT; i++) {

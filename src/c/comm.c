@@ -213,7 +213,12 @@ static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason,
   }
 }
 
+// stop_name is sent only for departures: ids on api.dpmhk.cz are packet-scoped
+// (the weekly timetable reassigns them), so a favorite saved under a previous
+// packet holds a now-stale id. The phone re-resolves the name to the current
+// packet's id, making taps correct even before the favorites mirror refreshes.
 static bool prv_send_request_with_id(uint8_t op, const char *stop_id,
+                                     const char *stop_name,
                                      uint32_t request_id) {
   DictionaryIterator *iter;
   if (app_message_outbox_begin(&iter) != APP_MSG_OK) {
@@ -224,18 +229,22 @@ static bool prv_send_request_with_id(uint8_t op, const char *stop_id,
   if (stop_id) {
     dict_write_cstring(iter, MESSAGE_KEY_STOP_ID, stop_id);
   }
+  if (stop_name && stop_name[0]) {
+    dict_write_cstring(iter, MESSAGE_KEY_META_STOP_NAME, stop_name);
+  }
   return app_message_outbox_send() == APP_MSG_OK;
 }
 
 static bool prv_send_request(uint8_t op, const char *stop_id) {
-  return prv_send_request_with_id(op, stop_id, s_request_counter);
+  return prv_send_request_with_id(op, stop_id, NULL, s_request_counter);
 }
 
 void comm_request_departures(const char *stop_id, const char *stop_name) {
   s_request_counter++;
   model_board_begin_request(s_request_counter, stop_id, stop_name);
   prv_notify_board();
-  if (!prv_send_request(OP_GET_DEPARTURES, stop_id)) {
+  if (!prv_send_request_with_id(OP_GET_DEPARTURES, stop_id, stop_name,
+                                s_request_counter)) {
     prv_departures_send_failed();
   }
 }
@@ -259,11 +268,11 @@ void comm_request_nearest(void) {
 // counter — bumping it would strand in-flight tracked replies (their rows
 // would fail the stale-id check and e.g. nearest_loading would never clear)
 void comm_add_favorite(const char *stop_id) {
-  prv_send_request_with_id(OP_ADD_FAVORITE, stop_id, 0);
+  prv_send_request_with_id(OP_ADD_FAVORITE, stop_id, NULL, 0);
 }
 
 void comm_remove_favorite(const char *stop_id) {
-  prv_send_request_with_id(OP_REMOVE_FAVORITE, stop_id, 0);
+  prv_send_request_with_id(OP_REMOVE_FAVORITE, stop_id, NULL, 0);
 }
 
 void comm_set_board_handler(CommUpdatedHandler handler) {
