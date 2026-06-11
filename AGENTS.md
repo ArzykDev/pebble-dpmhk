@@ -107,17 +107,22 @@ mismatches. Omitted META_STOP_NAME keeps the watch's request-time name.
 1 network, 2 API, 3 parse, 4 no packet, 5 GPS. Keep `comm.c`, `appmsg.js`, and
 `model.h` enums in sync when changing any of this.
 
-## Caching (hybrid live + offline)
+## Caching (live + offline fallback)
 
-Phone (localStorage): `stations:list` refreshed only when the weekly
-`/packet` id changes; `dep:<stopId>` = last board, replayed instantly with
-CACHED|STALE flags before the live fetch (stale-while-revalidate). A live
-error is swallowed ONLY when a cached board was actually painted (`painted`
-flag in index.js — both guards must stay symmetric or an empty cached board
-plus a live error leaves the watch on "Načítám..." forever). Watch
-(persist): key 1 = favorites mirror (instant first paint), key 2 = last board
-(4 rows, shown with the Offline badge when the phone is unreachable —
-`prv_departures_send_failed` in comm.c).
+Departure boards are NEVER cached on the phone: a board is a snapshot of the
+next few minutes, so any replayed copy shows already-departed buses and stale
+delays. The online path always fetches fresh — the watch shows "Načítám..."
+until live data lands (no stale-while-revalidate flicker). Phone
+(localStorage) caches only `stations:list` (refreshed when the weekly `/packet`
+id changes) and `cfg:favorites`.
+
+Offline fallback lives entirely on the watch (persist): key 1 = favorites
+mirror (instant first paint), key 2 = last board (4 rows, fresh boards only).
+The persisted board is shown with the Offline badge whenever live data can't be
+delivered — both when the phone is unreachable (`prv_departures_send_failed`,
+send failure) AND when the phone reports a fetch error (network/API/parse/
+no-packet; `prv_handle_departures_header` calls `persist_load_board`). The bare
+error screen appears only when no board is stored for that stop.
 
 ## Clay config page
 

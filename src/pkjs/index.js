@@ -84,32 +84,18 @@ Pebble.addEventListener('appmessage', function (e) {
   if (p.OP === appmsg.OP.GET_DEPARTURES) {
     var sentId = String(p.STOP_ID);
     var stopName = p.META_STOP_NAME ? String(p.META_STOP_NAME) : null;
-    // Stale-while-revalidate: paint cached board instantly, then live update.
-    // Keyed by the id the watch sent; the dep cache is wiped on a packet
-    // change, so a now-stale favorite id yields no paint (never a wrong
-    // board) instead of another stop's departures.
-    var cached = cache.getDepartures(sentId);
-    var painted = !!(cached && cached.items && cached.items.length);
-    if (painted) {
-      appmsg.sendDepartures(p.REQUEST_ID, null, cached.items, {
-        fetchedAt: cached.fetchedAt,
-        flags: appmsg.FLAG_CACHED | appmsg.FLAG_STALE,
-      });
-    }
-    // Live fetch against the current packet: re-resolve by name so a favorite
-    // whose id shifted with the weekly packet still hits the right stop.
+    // Always fetch fresh — no local replay. A departure board is a snapshot of
+    // the next few minutes, so a cached copy is misleading within minutes; the
+    // watch shows "Načítám..." until live data lands and falls back to its own
+    // persisted board (with the Offline badge) on error (see comm.c).
+    // Re-resolve by name so a favorite whose id shifted with the weekly packet
+    // still hits the right stop.
     resolveStopId(sentId, stopName, function (liveId) {
       departures.fetch(liveId, function (err, items, fetchedAt) {
         if (err) {
-          // Keep a painted cached board on screen rather than wiping it with
-          // an error — but if nothing was painted, the watch is waiting and
-          // MUST get a reply or it stays on "Načítám..." forever
-          if (!painted) {
-            appmsg.sendDeparturesError(p.REQUEST_ID, err);
-          }
+          appmsg.sendDeparturesError(p.REQUEST_ID, err);
           return;
         }
-        cache.setDepartures(liveId, items, fetchedAt, Date.now());
         appmsg.sendDepartures(p.REQUEST_ID, null, items, {
           fetchedAt: fetchedAt,
         });

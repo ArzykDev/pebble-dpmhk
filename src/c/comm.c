@@ -41,9 +41,18 @@ static void prv_handle_departures_header(DictionaryIterator *iter,
   Tuple *error = dict_find(iter, MESSAGE_KEY_ERROR);
   Tuple *flags = dict_find(iter, MESSAGE_KEY_META_FLAGS);
 
+  // Phone reached us but couldn't fetch: fall back to the persisted last board
+  // (shown with the Offline badge), mirroring the Bluetooth-down path. Only
+  // surface the bare error when no board is stored for this stop.
+  uint8_t err = error ? error->value->uint8 : ERR_NONE;
+  if (err != ERR_NONE && persist_load_board(board->stop_id)) {
+    prv_notify_board();
+    return;
+  }
+
   board->count = 0;
   board->expected = count ? count->value->uint8 : 0;
-  board->error = error ? error->value->uint8 : ERR_NONE;
+  board->error = err;
   board->flags = flags ? flags->value->uint8 : 0;
   prv_copy_tuple_str(iter, MESSAGE_KEY_META_STOP_NAME, board->stop_name,
                      NAME_LEN);

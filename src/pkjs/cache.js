@@ -1,5 +1,10 @@
 // Phone-side localStorage cache.
-// Keys: stations:packet, stations:list, cfg:favorites, dep:index, dep:<stopId>
+// Keys: stations:packet, stations:list, cfg:favorites
+//
+// Departure boards are NOT cached here: a board is a snapshot of the next few
+// minutes, so a replayed copy shows already-departed buses and stale delays.
+// The watch keeps its own last board (persist.c) purely as an offline fallback,
+// shown with an explicit Offline badge — the online path always fetches fresh.
 
 var api = require('./api');
 var dates = require('./date');
@@ -7,7 +12,6 @@ var dates = require('./date');
 var KEY_STATIONS_PACKET = 'stations:packet';
 var KEY_STATIONS = 'stations:list';
 var KEY_FAVORITES = 'cfg:favorites';
-var KEY_DEP_INDEX = 'dep:index'; // list of stopIds with a cached board
 
 function getJSON(key) {
   try {
@@ -55,15 +59,8 @@ function getStations(cb) {
         cb(err2);
         return;
       }
-      var prevPacket = localStorage.getItem(KEY_STATIONS_PACKET);
       setJSON(KEY_STATIONS, stations);
       localStorage.setItem(KEY_STATIONS_PACKET, String(packet));
-      // Departure boards are keyed by the packet-scoped stop id; once the
-      // packet changes those ids map to different stops, so drop stale boards
-      // to avoid replaying the wrong stop's cached departures.
-      if (prevPacket !== null && prevPacket !== String(packet)) {
-        clearDepartures();
-      }
       cb(null, stations);
     });
   });
@@ -78,39 +75,8 @@ function setFavorites(list) {
   setJSON(KEY_FAVORITES, list);
 }
 
-// Departure-board cache for stale-while-revalidate.
-// {at: epochMs, fetchedAt: "HH:MM", items: [...]} or null
-function getDepartures(stopId) {
-  return getJSON('dep:' + stopId);
-}
-
-function setDepartures(stopId, items, fetchedAt, nowMs) {
-  var id = String(stopId);
-  setJSON('dep:' + id, { at: nowMs, fetchedAt: fetchedAt, items: items });
-  // Track the key so clearDepartures can wipe boards on a packet change
-  // (no reliance on localStorage.length/key(), which pypkjs lacks).
-  var ids = getJSON(KEY_DEP_INDEX) || [];
-  if (ids.indexOf(id) === -1) {
-    ids.push(id);
-    setJSON(KEY_DEP_INDEX, ids);
-  }
-}
-
-// Drop every cached departure board; ids are only valid within one packet.
-function clearDepartures() {
-  var ids = getJSON(KEY_DEP_INDEX) || [];
-  try {
-    for (var i = 0; i < ids.length; i++) {
-      localStorage.removeItem('dep:' + ids[i]);
-    }
-    localStorage.removeItem(KEY_DEP_INDEX);
-  } catch (e) { /* best effort */ }
-}
-
 module.exports = {
   getStations: getStations,
   getFavorites: getFavorites,
   setFavorites: setFavorites,
-  getDepartures: getDepartures,
-  setDepartures: setDepartures,
 };
