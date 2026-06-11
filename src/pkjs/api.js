@@ -36,9 +36,29 @@ function request(method, path, body, cb) {
   xhr.send(body ? JSON.stringify(body) : null);
 }
 
+// The weekly packet list barely changes, but a single departures tap with a
+// stop name resolves the packet twice (cache.getStations + departures.fetch).
+// A short in-memory TTL coalesces those into one /packet GET without affecting
+// packet-rollover detection (weekly, so a ~minute of lag is harmless).
+var PACKETS_TTL_MS = 60000;
+var s_packets = null; // { at: epochMs, list: [...] }
+
 // cb(err, [{packet:"185", from:"2026-06-01", to:"2026-06-08"}, ...])
 function getPackets(cb) {
-  request('GET', '/packet', null, cb);
+  if (s_packets && Date.now() - s_packets.at < PACKETS_TTL_MS) {
+    cb(null, s_packets.list);
+    return;
+  }
+  request('GET', '/packet', null, function (err, list) {
+    if (err) {
+      cb(err);
+      return;
+    }
+    if (list) {
+      s_packets = { at: Date.now(), list: list };
+    }
+    cb(null, list);
+  });
 }
 
 // cb(err, [{id, name, lat, lng, linky:[]}, ...])  (~204 stops, ~46 KB)
