@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # On a release tag, fail fast unless v<tag> matches package.json's version
       # and that version is MAJOR.MINOR.PATCH. Keeps the git tag, the npm
@@ -47,7 +47,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libfreetype6 libpng16-16
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
 
@@ -58,6 +58,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.2.0  # no moving v8 major tag is published
+        with:
+          enable-cache: false  # no Python project here; nothing to key a cache on
 
       - name: Install pebble-tool
         run: |
@@ -68,7 +70,7 @@ jobs:
       # (~1.6 G). Cache it so runs after the first stay fast. Bump the key
       # suffix to force a refresh onto a newer SDK.
       - name: Cache Pebble SDK
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.local/share/pebble-sdk
           key: pebble-sdk-${{ runner.os }}-v1
@@ -80,7 +82,7 @@ jobs:
         run: pebble build
 
       - name: Upload .pbw
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pebble-app
           path: build/*.pbw
