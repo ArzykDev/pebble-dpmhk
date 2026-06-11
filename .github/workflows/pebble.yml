@@ -70,12 +70,16 @@ jobs:
       # (~1.6 G). Cache it so runs after the first stay fast. Bump the key
       # suffix to force a refresh onto a newer SDK.
       - name: Cache Pebble SDK
+        id: sdk-cache
         uses: actions/cache@v5
         with:
           path: ~/.local/share/pebble-sdk
           key: pebble-sdk-${{ runner.os }}-v1
 
+      # `pebble sdk install latest` exits 1 if the SDK is already present, so
+      # only run it on a cache miss. Bump the cache key above to pull a newer SDK.
       - name: Install Pebble SDK
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
         run: pebble sdk install latest
 
       - name: Build
