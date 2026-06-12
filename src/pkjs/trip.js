@@ -9,17 +9,31 @@ var util = require('./util');
 
 var MAX_ROWS = 18; // keep in sync with MAX_TRIP in model.h
 
-// Fetch both directions. Either may fail independently; we degrade to whichever
-// one we got. cb(err, dir0, dir1) where a failed direction is null.
+// Fetch both directions concurrently (they're independent). Either may fail on
+// its own; we degrade to whichever we got. cb(err, dir0, dir1) where a failed
+// direction is null.
 function getBoth(packet, line, cb) {
-  api.getRoute(packet, line, '0', function (err0, dir0) {
-    api.getRoute(packet, line, '1', function (err1, dir1) {
-      if ((err0 || !dir0) && (err1 || !dir1)) {
-        cb(err0 || err1);
-        return;
-      }
-      cb(null, err0 ? null : dir0, err1 ? null : dir1);
-    });
+  var pending = 2;
+  var dir0, dir1, err0, err1;
+  function done() {
+    if (--pending > 0) {
+      return;
+    }
+    if ((err0 || !dir0) && (err1 || !dir1)) {
+      cb(err0 || err1);
+      return;
+    }
+    cb(null, err0 ? null : dir0, err1 ? null : dir1);
+  }
+  api.getRoute(packet, line, '0', function (e, d) {
+    err0 = e;
+    dir0 = d;
+    done();
+  });
+  api.getRoute(packet, line, '1', function (e, d) {
+    err1 = e;
+    dir1 = d;
+    done();
   });
 }
 

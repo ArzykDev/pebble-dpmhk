@@ -205,7 +205,10 @@ static void prv_handle_trip_row(DictionaryIterator *iter, TripModel *trip,
   if (trip->count >= trip->expected) {
     trip->loading = false;
   }
-  prv_notify_trip();
+  // Repaint on first row, completion, and every 4th row to limit flicker
+  if (trip->count == 1 || !trip->loading || trip->count % 4 == 0) {
+    prv_notify_trip();
+  }
 }
 
 static void prv_inbox_received(DictionaryIterator *iter, void *context) {
