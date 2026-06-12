@@ -1,7 +1,8 @@
 {
   "name": "pebble-dpmhk",
-  "author": "arzyk <hello@arzyk.me>",
+  "author": "Arzyk <hello@arzyk.me>",
   "version": "1.0.0",
+  "license": "MIT",
   "keywords": [
     "pebble-app"
   ],
