@@ -4,6 +4,7 @@
 #define MAX_DEPARTURES 18
 #define MAX_FAVORITES 6
 #define MAX_NEAREST 5
+#define MAX_TRIP 18
 
 #define LINE_LEN 6
 #define DEST_LEN 40
@@ -65,9 +66,26 @@ typedef struct {
   uint8_t nearest_error;  // ERR_*
 } StopsModel;
 
+// Downstream stops a chosen departure passes through (names only, no times —
+// the /trasa endpoint has no per-stop times). line/dest are kept for the title.
+typedef struct {
+  char stops[MAX_TRIP][NAME_LEN];
+  uint8_t count;     // rows received so far
+  uint8_t expected;  // META_COUNT from response header
+  char line[LINE_LEN];
+  char dest[DEST_LEN];
+  uint8_t error;  // ERR_*
+  uint32_t request_id;
+  bool loading;
+} TripModel;
+
 DepartureBoard *model_board(void);
 StopsModel *model_stops(void);
+TripModel *model_trip(void);
 
 // Reset the board for a new request (sets loading, clears rows/error)
 void model_board_begin_request(uint32_t request_id, const char *stop_id,
                                const char *stop_name);
+// Reset the trip route for a new request (sets loading, clears rows/error)
+void model_trip_begin_request(uint32_t request_id, const char *line,
+                              const char *dest);

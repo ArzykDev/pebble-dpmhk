@@ -2,6 +2,7 @@
 
 static DepartureBoard s_board;
 static StopsModel s_stops;
+static TripModel s_trip;
 
 DepartureBoard *model_board(void) {
   return &s_board;
@@ -9,6 +10,10 @@ DepartureBoard *model_board(void) {
 
 StopsModel *model_stops(void) {
   return &s_stops;
+}
+
+TripModel *model_trip(void) {
+  return &s_trip;
 }
 
 void model_board_begin_request(uint32_t request_id, const char *stop_id,
@@ -24,4 +29,17 @@ void model_board_begin_request(uint32_t request_id, const char *stop_id,
   s_board.stop_id[ID_LEN - 1] = '\0';
   strncpy(s_board.stop_name, stop_name, NAME_LEN - 1);
   s_board.stop_name[NAME_LEN - 1] = '\0';
+}
+
+void model_trip_begin_request(uint32_t request_id, const char *line,
+                              const char *dest) {
+  s_trip.count = 0;
+  s_trip.expected = 0;
+  s_trip.error = ERR_NONE;
+  s_trip.request_id = request_id;
+  s_trip.loading = true;
+  strncpy(s_trip.line, line, LINE_LEN - 1);
+  s_trip.line[LINE_LEN - 1] = '\0';
+  strncpy(s_trip.dest, dest, DEST_LEN - 1);
+  s_trip.dest[DEST_LEN - 1] = '\0';
 }

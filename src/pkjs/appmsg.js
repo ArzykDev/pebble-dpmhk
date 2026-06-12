@@ -4,6 +4,7 @@
 var OP = {
   GET_DEPARTURES: 1,
   GET_NEAREST: 2,
+  GET_TRIP: 3,
   FAVORITES: 4,
   ADD_FAVORITE: 5,
   REMOVE_FAVORITE: 6,
@@ -125,6 +126,40 @@ function sendStops(requestId, op, stops, error) {
   sendChain(msgs);
 }
 
+// names: [stopName, ...] in travel order. Reuses the stops-row convention
+// ROW_LINE = name (no id/time/delay for a route).
+function sendTrip(requestId, names) {
+  var msgs = [
+    {
+      REQUEST_ID: requestId,
+      OP: OP.GET_TRIP,
+      META_COUNT: names.length,
+      ERROR: ERR.NONE,
+    },
+  ];
+  names.forEach(function (name, i) {
+    msgs.push({
+      REQUEST_ID: requestId,
+      OP: OP.GET_TRIP,
+      ROW_INDEX: i,
+      META_COUNT: names.length,
+      ROW_LINE: name,
+    });
+  });
+  sendChain(msgs);
+}
+
+function sendTripError(requestId, error) {
+  sendChain([
+    {
+      REQUEST_ID: requestId,
+      OP: OP.GET_TRIP,
+      META_COUNT: 0,
+      ERROR: error,
+    },
+  ]);
+}
+
 module.exports = {
   OP: OP,
   ERR: ERR,
@@ -132,4 +167,6 @@ module.exports = {
   sendDepartures: sendDepartures,
   sendDeparturesError: sendDeparturesError,
   sendStops: sendStops,
+  sendTrip: sendTrip,
+  sendTripError: sendTripError,
 };

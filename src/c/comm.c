@@ -12,6 +12,7 @@
 
 static CommUpdatedHandler s_board_handler;
 static CommUpdatedHandler s_stops_handler;
+static CommUpdatedHandler s_trip_handler;
 static uint32_t s_request_counter;
 
 static void prv_notify_board(void) {
@@ -23,6 +24,12 @@ static void prv_notify_board(void) {
 static void prv_notify_stops(void) {
   if (s_stops_handler) {
     s_stops_handler();
+  }
+}
+
+static void prv_notify_trip(void) {
+  if (s_trip_handler) {
+    s_trip_handler();
   }
 }
 
@@ -170,6 +177,40 @@ static void prv_handle_stops_row(DictionaryIterator *iter, uint8_t op,
   prv_notify_stops();
 }
 
+static void prv_handle_trip_header(DictionaryIterator *iter, TripModel *trip) {
+  Tuple *count = dict_find(iter, MESSAGE_KEY_META_COUNT);
+  Tuple *error = dict_find(iter, MESSAGE_KEY_ERROR);
+  uint8_t err = error ? error->value->uint8 : ERR_NONE;
+  uint8_t expected = count ? count->value->uint8 : 0;
+  if (expected > MAX_TRIP) {
+    expected = MAX_TRIP;
+  }
+  // No offline fallback: routes aren't cached, so just surface the error.
+  trip->count = 0;
+  trip->expected = (err == ERR_NONE) ? expected : 0;
+  trip->error = err;
+  trip->loading = (err == ERR_NONE && expected > 0);
+  prv_notify_trip();
+}
+
+static void prv_handle_trip_row(DictionaryIterator *iter, TripModel *trip,
+                                uint8_t index) {
+  if (index >= MAX_TRIP || index >= trip->expected) {
+    return;
+  }
+  prv_copy_tuple_str(iter, MESSAGE_KEY_ROW_LINE, trip->stops[index], NAME_LEN);
+  if (index + 1 > trip->count) {
+    trip->count = index + 1;
+  }
+  if (trip->count >= trip->expected) {
+    trip->loading = false;
+  }
+  // Repaint on first row, completion, and every 4th row to limit flicker
+  if (trip->count == 1 || !trip->loading || trip->count % 4 == 0) {
+    prv_notify_trip();
+  }
+}
+
 static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   Tuple *op_tuple = dict_find(iter, MESSAGE_KEY_OP);
   Tuple *req_tuple = dict_find(iter, MESSAGE_KEY_REQUEST_ID);
@@ -203,6 +244,13 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
     } else {
       prv_handle_stops_header(iter, op);
     }
+  } else if (op == OP_GET_TRIP) {
+    TripModel *trip = model_trip();
+    if (is_row) {
+      prv_handle_trip_row(iter, trip, row_index->value->uint8);
+    } else {
+      prv_handle_trip_header(iter, trip);
+    }
   }
 }
 
@@ -228,6 +276,11 @@ static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason,
     stops->nearest_loading = false;
     stops->nearest_error = ERR_NETWORK;
     prv_notify_stops();
+  } else if (op == OP_GET_TRIP) {
+    TripModel *trip = model_trip();
+    trip->loading = false;
+    trip->error = ERR_NETWORK;
+    prv_notify_trip();
   }
 }
 
@@ -267,6 +320,42 @@ void comm_request_departures(const char *stop_id, const char *stop_name) {
   }
 }
 
+static void prv_trip_send_failed(void) {
+  TripModel *trip = model_trip();
+  trip->loading = false;
+  trip->error = ERR_NETWORK;
+  prv_notify_trip();
+}
+
+// Reuses row keys in the request dict (harmless): ROW_LINE = line,
+// ROW_DEST = destination text, META_STOP_NAME = current stop name. The phone
+// resolves the /trasa direction from these by name.
+static bool prv_send_trip_request(const char *line, const char *dest,
+                                  const char *stop_name) {
+  DictionaryIterator *iter;
+  if (app_message_outbox_begin(&iter) != APP_MSG_OK) {
+    return false;
+  }
+  dict_write_uint8(iter, MESSAGE_KEY_OP, OP_GET_TRIP);
+  dict_write_uint32(iter, MESSAGE_KEY_REQUEST_ID, s_request_counter);
+  dict_write_cstring(iter, MESSAGE_KEY_ROW_LINE, line);
+  dict_write_cstring(iter, MESSAGE_KEY_ROW_DEST, dest);
+  if (stop_name && stop_name[0]) {
+    dict_write_cstring(iter, MESSAGE_KEY_META_STOP_NAME, stop_name);
+  }
+  return app_message_outbox_send() == APP_MSG_OK;
+}
+
+void comm_request_trip(const char *line, const char *dest,
+                       const char *stop_name) {
+  s_request_counter++;
+  model_trip_begin_request(s_request_counter, line, dest);
+  prv_notify_trip();
+  if (!prv_send_trip_request(line, dest, stop_name)) {
+    prv_trip_send_failed();
+  }
+}
+
 void comm_request_nearest(void) {
   s_request_counter++;
   StopsModel *stops = model_stops();
@@ -299,6 +388,10 @@ void comm_set_board_handler(CommUpdatedHandler handler) {
 
 void comm_set_stops_handler(CommUpdatedHandler handler) {
   s_stops_handler = handler;
+}
+
+void comm_set_trip_handler(CommUpdatedHandler handler) {
+  s_trip_handler = handler;
 }
 
 void comm_init(void) {

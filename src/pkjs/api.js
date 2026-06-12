@@ -101,8 +101,39 @@ function getDepartures(packet, stopId, datum, cb) {
   });
 }
 
+// Ordered stop list for one line + direction. `smer` is a direction code
+// "0"/"1" (NOT the destination text); the API returns stops in travel order.
+// cb(err, [{order, name}, ...]) — order is an int; there are no per-stop times.
+function getRoute(packet, linka, smer, cb) {
+  var body = {
+    packet: String(packet),
+    linka: String(linka),
+    smer: String(smer),
+  };
+  request('POST', '/trasa', body, function (err, rows) {
+    if (err) {
+      cb(err);
+      return;
+    }
+    if (!Array.isArray(rows)) {
+      cb({ type: 'parse' });
+      return;
+    }
+    var items = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!r || typeof r.name !== 'string') {
+        continue; // parse defensively — API is undocumented
+      }
+      items.push({ order: parseInt(r.order, 10), name: r.name });
+    }
+    cb(null, items);
+  });
+}
+
 module.exports = {
   getPackets: getPackets,
   getStations: getStations,
   getDepartures: getDepartures,
+  getRoute: getRoute,
 };
