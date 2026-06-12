@@ -60,6 +60,13 @@ No auth, open CORS, JSON UTF-8. Contracts live ONLY in `src/pkjs/api.js`.
 - `POST /stations` `{"packet":"185"}` → 204 stops `{id,name,lat,lng,linky[]}`
 - `POST /odjezd` `{"packet":"185","zastavka":"2","datum":"06_06_2026"}` →
   `[{linka,odjezd,smer,delay_seconds,delay_status}, …]`
+- `POST /trasa` `{"packet":"185","linka":"16","smer":"1"}` →
+  `[{order:"6",name:"STĚŽÍRKY"}, …]` ordered stops of a line. **`smer` is a
+  `0`/`1` direction code, NOT the destination text**; rows come in travel order
+  (smer=0 = ascending `order`, smer=1 = descending). `order` is a global stop
+  index shared across both directions, so it pins direction even when a
+  destination stop is absent from the chosen array. **No per-stop times** —
+  names only (powers the trip-route screen).
 
 Gotchas: **`datum` is `DD_MM_YYYY` with underscores**; `linka` is space-padded
 (trim it); `/odjezd` returns a near-future window from server "now" (2–18
@@ -74,11 +81,13 @@ src/c/comm.c           ALL app_message_* usage; request/response protocol
 src/c/model.c|h        Departure/StopRef/DepartureBoard structs + static stores
 src/c/persist.c        watch storage: favorites mirror + last board (≤256 B/key)
 src/c/strings.h        every Czech UI string (UTF-8 literals)
-src/c/windows/         stops_window (Oblíbené+Nejbližší), departures_window
+src/c/windows/         stops_window (Oblíbené+Nejbližší), departures_window,
+                       trip_window (downstream stops of a tapped departure)
 src/pkjs/index.js      'ready'/'appmessage' router + Clay wiring
 src/pkjs/appmsg.js     header + chained row messages (protocol mirror of comm.c)
 src/pkjs/api.js        XHR client for api.dpmhk.cz (the only file knowing URLs)
 src/pkjs/departures.js packet pick → /odjezd → 23:00 next-day merge
+src/pkjs/trip.js       packet pick → /trasa both dirs → downstream stop slice
 src/pkjs/cache.js      localStorage: stations:list, cfg:favorites, dep:<id>
 src/pkjs/geo.js        geolocation + haversine top-5 nearest
 src/pkjs/config.js     Clay config items (6 favorite inputs)
@@ -92,8 +101,11 @@ src/pkjs/date.js       DD_MM_YYYY datum, packet pick by range
 Request (watch→JS): `{OP, REQUEST_ID, STOP_ID?, META_STOP_NAME?}`
 (GET_DEPARTURES sends META_STOP_NAME so the phone re-resolves the
 packet-scoped stop id by name — see Caching). OPs: 1=GET_DEPARTURES,
-2=GET_NEAREST, 4=FAVORITES (JS→watch push, REQUEST_ID=0), 5=ADD_FAVORITE,
-6=REMOVE_FAVORITE (watch long-press; JS answers with an OP=4 push).
+2=GET_NEAREST, 3=GET_TRIP, 4=FAVORITES (JS→watch push, REQUEST_ID=0),
+5=ADD_FAVORITE, 6=REMOVE_FAVORITE (watch long-press; JS answers with an OP=4
+push). GET_TRIP reuses request row keys: ROW_LINE=line, ROW_DEST=destination
+text, META_STOP_NAME=current stop; the phone resolves the /trasa direction by
+name and streams downstream stop names back (rows: ROW_LINE=stop name).
 OPs 5/6 are fire-and-forget: sent with REQUEST_ID=0 and they must NOT bump
 the request counter — bumping it strands in-flight tracked replies (their
 rows fail the stale-id check and loading flags never clear).

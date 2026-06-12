@@ -5,6 +5,7 @@ var config = require('./config');
 var customClay = require('./custom-clay');
 var departures = require('./departures');
 var geo = require('./geo');
+var trip = require('./trip');
 var util = require('./util');
 
 // Config page is static; the stop-name datalist travels via meta.userData.
@@ -104,6 +105,18 @@ Pebble.addEventListener('appmessage', function (e) {
   } else if (p.OP === appmsg.OP.GET_NEAREST) {
     geo.findNearest(5, function (err, stops) {
       appmsg.sendStops(p.REQUEST_ID, appmsg.OP.GET_NEAREST, stops || [], err);
+    });
+  } else if (p.OP === appmsg.OP.GET_TRIP) {
+    // Watch sends the line, destination text, and current stop name; resolve
+    // the /trasa direction by name (no /stations lookup needed).
+    trip.fetch(String(p.ROW_LINE), String(p.ROW_DEST),
+        p.META_STOP_NAME ? String(p.META_STOP_NAME) : '',
+        function (err, names) {
+      if (err) {
+        appmsg.sendTripError(p.REQUEST_ID, err);
+        return;
+      }
+      appmsg.sendTrip(p.REQUEST_ID, names);
     });
   } else if (p.OP === appmsg.OP.ADD_FAVORITE ||
              p.OP === appmsg.OP.REMOVE_FAVORITE) {

@@ -8,6 +8,7 @@
 #define STR_FIND_NEAREST  "Najít polohou..."
 #define STR_LOADING       "Načítám..."
 #define STR_NO_DEPARTURES "Žádné spoje"
+#define STR_TRIP_EMPTY    "Trasa nedostupná"
 #define STR_CONN_ERROR    "Chyba spojení"
 #define STR_NO_FAVORITES  "Nastavte v telefonu"
 #define STR_NO_LOCATION   "Poloha nedostupná"

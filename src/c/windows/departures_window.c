@@ -2,6 +2,7 @@
 
 #include "../comm.h"
 #include "../strings.h"
+#include "trip_window.h"
 
 #define ROW_HEIGHT 44
 #define STATUS_ROW_HEIGHT 32
@@ -110,7 +111,19 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
 
 static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
                              void *context) {
-  // Refresh the current stop
+  // Open the route of the tapped departure (downstream stops)
+  const DepartureBoard *board = model_board();
+  if (board->count == 0) {
+    return;
+  }
+  const Departure *dep = &board->items[cell_index->row];
+  trip_window_push(dep->line, dep->dest);
+}
+
+static void prv_select_long_click(MenuLayer *menu_layer, MenuIndex *cell_index,
+                                  void *context) {
+  // Long-press still refreshes the current stop (the board also auto-refreshes
+  // on window entry, but keep a manual gesture for power users)
   const DepartureBoard *board = model_board();
   comm_request_departures(board->stop_id, board->stop_name);
 }
@@ -135,6 +148,7 @@ static void prv_window_load(Window *window) {
       .draw_header = prv_draw_header,
       .draw_row = prv_draw_row,
       .select_click = prv_select_click,
+      .select_long_click = prv_select_long_click,
   });
 #if defined(PBL_ROUND)
   menu_layer_set_center_focused(s_menu_layer, true);
