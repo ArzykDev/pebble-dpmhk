@@ -66,6 +66,23 @@ function sendChain(messages, done) {
   trySend();
 }
 
+// Best-effort terminal error header — rescues the watch from a stuck "loading"
+// state when a row chain fails partway: the header (with the full META_COUNT)
+// already arrived, so the watch waits for rows that never come. Carries the
+// real requestId (comm.c drops REQUEST_ID 0 / mismatches as stale) and no
+// ROW_INDEX, so comm.c routes it to the header handler and falls back. Reuses
+// sendChain's retry; no further error header on failure, so it can't recurse.
+function sendErrorHeader(requestId, op, errCode) {
+  sendChain([
+    {
+      REQUEST_ID: requestId,
+      OP: op,
+      META_COUNT: 0,
+      ERROR: errCode,
+    },
+  ]);
+}
+
 // items: [{line, dest, time, delay}]
 // stopName may be null — the watch then keeps the name it already has.
 function sendDepartures(requestId, stopName, items, opts) {
@@ -95,7 +112,14 @@ function sendDepartures(requestId, stopName, items, opts) {
         : it.delay,
     });
   });
-  sendChain(msgs);
+  // On a chain failure for a live board, tell the watch so it can fall back to
+  // its persisted board instead of hanging. Skip if this was already an error
+  // payload (sendDeparturesError) to avoid re-sending.
+  sendChain(msgs, function (e) {
+    if (e && !opts.error) {
+      sendErrorHeader(requestId, OP.GET_DEPARTURES, ERR.NETWORK);
+    }
+  });
 }
 
 function sendDeparturesError(requestId, error) {
@@ -123,7 +147,15 @@ function sendStops(requestId, op, stops, error) {
       ROW_TIME: s.dist || '',
     });
   });
-  sendChain(msgs);
+  // Recover the nearest list on chain failure. Skip favorites pushes
+  // (requestId 0, fire-and-forget — an error header there does nothing useful
+  // and an empty one could trip the empty-favorites persist) and already-error
+  // sends.
+  sendChain(msgs, function (e) {
+    if (e && requestId !== 0 && !error) {
+      sendErrorHeader(requestId, op, ERR.NETWORK);
+    }
+  });
 }
 
 // names: [stopName, ...] in travel order. Reuses the stops-row convention
@@ -146,7 +178,13 @@ function sendTrip(requestId, names) {
       ROW_LINE: name,
     });
   });
-  sendChain(msgs);
+  // Recover the trip screen on chain failure (no offline fallback for routes —
+  // comm.c just surfaces the error).
+  sendChain(msgs, function (e) {
+    if (e) {
+      sendErrorHeader(requestId, OP.GET_TRIP, ERR.NETWORK);
+    }
+  });
 }
 
 function sendTripError(requestId, error) {
