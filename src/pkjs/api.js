@@ -62,24 +62,40 @@ function getPackets(cb) {
 }
 
 // cb(err, [{id, name, lat, lng, linky:[]}, ...])  (~204 stops, ~46 KB)
+// The API wraps the list in a { stations: [...] } envelope (changed 2026-06;
+// was a bare array). Unwrap here so callers keep receiving a plain array.
 function getStations(packet, cb) {
-  request('POST', '/stations', { packet: String(packet) }, cb);
+  request('POST', '/stations', { packet: String(packet) }, function (err, body) {
+    if (err) {
+      cb(err);
+      return;
+    }
+    var list = body && body.stations;
+    if (!Array.isArray(list)) {
+      cb({ type: 'parse' });
+      return;
+    }
+    cb(null, list);
+  });
 }
 
 // datum must be DD_MM_YYYY (underscores!).
 // cb(err, [{line, dest, time, delay}, ...]) — normalized, linka trimmed,
 // delay in seconds or null when the API has no realtime match.
+// Endpoint renamed /odjezd -> /odjezdy and rows wrapped in a
+// { departures: [...] } envelope (changed 2026-06).
 function getDepartures(packet, stopId, datum, cb) {
   var body = {
     packet: String(packet),
     zastavka: String(stopId),
     datum: datum,
   };
-  request('POST', '/odjezd', body, function (err, rows) {
+  request('POST', '/odjezdy', body, function (err, payload) {
     if (err) {
       cb(err);
       return;
     }
+    var rows = payload && payload.departures;
     if (!Array.isArray(rows)) {
       cb({ type: 'parse' });
       return;

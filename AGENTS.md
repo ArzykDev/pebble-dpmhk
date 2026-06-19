@@ -57,9 +57,12 @@ No auth, open CORS, JSON UTF-8. Contracts live ONLY in `src/pkjs/api.js`.
 
 - `GET /packet` → `[{packet:"185", from:"2026-06-01", to:"2026-06-08"}, …]`
   (weekly timetable packets; pick the one covering the query date)
-- `POST /stations` `{"packet":"185"}` → 204 stops `{id,name,lat,lng,linky[]}`
-- `POST /odjezd` `{"packet":"185","zastavka":"2","datum":"06_06_2026"}` →
-  `[{linka,odjezd,smer,delay_seconds,delay_status}, …]`
+- `POST /stations` `{"packet":"185"}` →
+  `{stations:[{id,name,lat,lng,linky[]}, …]}` (~204 stops; wrapped in a
+  `stations` envelope since 2026-06)
+- `POST /odjezdy` `{"packet":"185","zastavka":"2","datum":"06_06_2026"}` →
+  `{departures:[{linka,odjezd,smer,delay_seconds,delay_status}, …]}` (endpoint
+  renamed from `/odjezd`, wrapped in a `departures` envelope since 2026-06)
 - `POST /trasa` `{"packet":"185","linka":"16","smer":"1"}` →
   `[{order:"6",name:"STĚŽÍRKY"}, …]` ordered stops of a line. **`smer` is a
   `0`/`1` direction code, NOT the destination text**; rows come in travel order
@@ -69,7 +72,7 @@ No auth, open CORS, JSON UTF-8. Contracts live ONLY in `src/pkjs/api.js`.
   names only (powers the trip-route screen).
 
 Gotchas: **`datum` is `DD_MM_YYYY` with underscores**; `linka` is space-padded
-(trim it); `/odjezd` returns a near-future window from server "now" (2–18
+(trim it); `/odjezdy` returns a near-future window from server "now" (2–18
 rows). The API is undocumented and may change — parse defensively, fall back
 to cache, keep request volume low.
 
