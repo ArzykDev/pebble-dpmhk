@@ -44,7 +44,9 @@ function buildOrderMap(dir0, dir1) {
     if (!dir) return;
     dir.forEach(function (s) {
       var key = util.foldName(s.name);
-      if (!(key in map)) {
+      // Skip non-numeric orders: a NaN would silently bias the direction pick
+      // in resolveDownstream toward dir0. Absent keys fall back gracefully.
+      if (!(key in map) && typeof s.order === 'number' && isFinite(s.order)) {
         map[key] = s.order;
       }
     });

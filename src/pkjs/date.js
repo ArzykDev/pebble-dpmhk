@@ -21,6 +21,9 @@ function hhmm(d) {
 
 // Pick the packet whose [from, to] range covers the date; null if none
 function pickPacket(packets, d) {
+  if (!packets || !packets.length) {
+    return null;
+  }
   var iso = toISO(d);
   for (var i = 0; i < packets.length; i++) {
     var p = packets[i];

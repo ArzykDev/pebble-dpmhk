@@ -54,9 +54,14 @@ function getPackets(cb) {
       cb(err);
       return;
     }
-    if (list) {
-      s_packets = { at: Date.now(), list: list };
+    // Validate before caching: a non-array body (the API is undocumented and
+    // may return null or an error envelope) would otherwise poison s_packets
+    // for the TTL and throw in pickPacket. Mirror getDepartures/getRoute.
+    if (!Array.isArray(list)) {
+      cb({ type: 'parse' });
+      return;
     }
+    s_packets = { at: Date.now(), list: list };
     cb(null, list);
   });
 }
@@ -141,7 +146,10 @@ function getRoute(packet, linka, smer, cb) {
       if (!r || typeof r.name !== 'string') {
         continue; // parse defensively — API is undocumented
       }
-      items.push({ order: parseInt(r.order, 10), name: r.name });
+      // Keep the row regardless (the name is what's displayed and sliced);
+      // null a non-numeric order so it stays out of the direction map.
+      var order = parseInt(r.order, 10);
+      items.push({ order: isNaN(order) ? null : order, name: r.name });
     }
     cb(null, items);
   });

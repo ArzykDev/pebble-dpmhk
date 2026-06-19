@@ -178,7 +178,15 @@ Pebble.addEventListener('webviewclosed', function (e) {
   }
 
   cache.getStations(function (err2, stations) {
-    var byName = indexByFoldedName(err2 ? [] : stations);
+    if (err2) {
+      // Without the station list we can't resolve the config inputs (names) to
+      // packet-scoped ids, so every input would fail to match and we'd push an
+      // empty list — wiping the user's favorites (phone cache + watch mirror).
+      // Leave the saved favorites untouched instead.
+      console.log('config save: stations unavailable, keeping favorites');
+      return;
+    }
+    var byName = indexByFoldedName(stations);
 
     var favorites = [];
     for (var i = 1; i <= config.SLOT_COUNT; i++) {
