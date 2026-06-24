@@ -5,6 +5,20 @@
 var BASE_URL = 'https://api.dpmhk.cz';
 var TIMEOUT_MS = 8000;
 
+// The backend has flip-flopped list responses between a bare array and an
+// { <key>: [...] } envelope (enveloped 2026-06, reverted 2026-06). Accept
+// either shape so a future flip can't break us again: take the bare array, or
+// the named property, whichever is an array. Returns null if neither is.
+function unwrapList(body, key) {
+  if (Array.isArray(body)) {
+    return body;
+  }
+  if (body && Array.isArray(body[key])) {
+    return body[key];
+  }
+  return null;
+}
+
 // Error types map to the ERR codes in appmsg.js / model.h
 function request(method, path, body, cb) {
   var xhr = new XMLHttpRequest();
@@ -67,16 +81,16 @@ function getPackets(cb) {
 }
 
 // cb(err, [{id, name, lat, lng, linky:[]}, ...])  (~204 stops, ~46 KB)
-// The API wraps the list in a { stations: [...] } envelope (changed 2026-06;
-// was a bare array). Unwrap here so callers keep receiving a plain array.
+// Tolerates both a bare array and a { stations: [...] } envelope (see
+// unwrapList) — the backend has shipped both shapes.
 function getStations(packet, cb) {
   request('POST', '/stations', { packet: String(packet) }, function (err, body) {
     if (err) {
       cb(err);
       return;
     }
-    var list = body && body.stations;
-    if (!Array.isArray(list)) {
+    var list = unwrapList(body, 'stations');
+    if (!list) {
       cb({ type: 'parse' });
       return;
     }
@@ -87,8 +101,8 @@ function getStations(packet, cb) {
 // datum must be DD_MM_YYYY (underscores!).
 // cb(err, [{line, dest, time, delay}, ...]) — normalized, linka trimmed,
 // delay in seconds or null when the API has no realtime match.
-// Endpoint renamed /odjezd -> /odjezdy and rows wrapped in a
-// { departures: [...] } envelope (changed 2026-06).
+// Endpoint renamed /odjezd -> /odjezdy (2026-06). Rows arrive as either a bare
+// array or a { departures: [...] } envelope (see unwrapList) — accept both.
 function getDepartures(packet, stopId, datum, cb) {
   var body = {
     packet: String(packet),
@@ -100,8 +114,8 @@ function getDepartures(packet, stopId, datum, cb) {
       cb(err);
       return;
     }
-    var rows = payload && payload.departures;
-    if (!Array.isArray(rows)) {
+    var rows = unwrapList(payload, 'departures');
+    if (!rows) {
       cb({ type: 'parse' });
       return;
     }
@@ -131,12 +145,13 @@ function getRoute(packet, linka, smer, cb) {
     linka: String(linka),
     smer: String(smer),
   };
-  request('POST', '/trasa', body, function (err, rows) {
+  request('POST', '/trasa', body, function (err, payload) {
     if (err) {
       cb(err);
       return;
     }
-    if (!Array.isArray(rows)) {
+    var rows = unwrapList(payload, 'trasa');
+    if (!rows) {
       cb({ type: 'parse' });
       return;
     }

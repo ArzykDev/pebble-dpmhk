@@ -58,11 +58,13 @@ No auth, open CORS, JSON UTF-8. Contracts live ONLY in `src/pkjs/api.js`.
 - `GET /packet` → `[{packet:"185", from:"2026-06-01", to:"2026-06-08"}, …]`
   (weekly timetable packets; pick the one covering the query date)
 - `POST /stations` `{"packet":"185"}` →
-  `{stations:[{id,name,lat,lng,linky[]}, …]}` (~204 stops; wrapped in a
-  `stations` envelope since 2026-06)
+  `[{id,name,lat,lng,linky[]}, …]` (~204 stops). The backend has flip-flopped
+  between a bare array and a `{stations:[…]}` envelope (enveloped then reverted
+  to bare array, both 2026-06); `api.js` accepts EITHER (see `unwrapList`).
 - `POST /odjezdy` `{"packet":"185","zastavka":"2","datum":"06_06_2026"}` →
-  `{departures:[{linka,odjezd,smer,delay_seconds,delay_status}, …]}` (endpoint
-  renamed from `/odjezd`, wrapped in a `departures` envelope since 2026-06)
+  `[{linka,odjezd,smer,delay_seconds,delay_status}, …]` (endpoint renamed from
+  `/odjezd` in 2026-06). Same flip-flop as `/stations`: bare array or a
+  `{departures:[…]}` envelope; `api.js` accepts EITHER.
 - `POST /trasa` `{"packet":"185","linka":"16","smer":"1"}` →
   `[{order:"6",name:"STĚŽÍRKY"}, …]` ordered stops of a line. **`smer` is a
   `0`/`1` direction code, NOT the destination text**; rows come in travel order
