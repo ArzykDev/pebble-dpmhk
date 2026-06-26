@@ -9,7 +9,11 @@
 #define LINE_LEN 6
 #define DEST_LEN 40
 #define TIME_LEN 8
-#define NAME_LEN 32
+// 34 = longest current stop name (33 B, e.g. "FN Pavilon profesora Bašteckého")
+// + NUL. This is the ceiling that keeps the 6-favorite persist blob under
+// PERSIST_DATA_MAX_LENGTH (1 + 6*(ID_LEN+NAME_LEN) = 253 B). Names longer than
+// this still resolve via the phone's unique-prefix fallback (see index.js).
+#define NAME_LEN 34
 #define ID_LEN 8
 #define DIST_LEN 8
 

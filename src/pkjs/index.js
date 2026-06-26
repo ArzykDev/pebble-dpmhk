@@ -29,39 +29,73 @@ function indexByFoldedName(stations) {
   return byName;
 }
 
+// Resolve a stop by its stable folded name. Exact match first; if the name
+// arrived truncated (the watch caps names at NAME_LEN, so a very long name is
+// cut), fall back to a UNIQUE folded-prefix match. Requires a long-ish key and
+// uniqueness so it never guesses between two stops. Returns null if unresolved.
+// Pass a prebuilt byName index to avoid rebuilding it on repeated lookups.
+function resolveStation(stations, name, byName) {
+  byName = byName || indexByFoldedName(stations);
+  var key = util.foldName(name);
+  if (byName[key]) {
+    return byName[key];
+  }
+  if (key.length < 16) {
+    return null; // too short to be a safe prefix — treat as not found
+  }
+  var hit = null;
+  for (var i = 0; i < stations.length; i++) {
+    if (util.foldName(stations[i].name).indexOf(key) === 0) {
+      if (hit) {
+        return null; // ambiguous prefix — refuse to guess
+      }
+      hit = stations[i];
+    }
+  }
+  return hit;
+}
+
 // Re-resolve each favorite's (ephemeral) id by its stable name against the
 // current packet's list. Entries whose name vanished are kept untouched.
 function remapFavorites(favorites, stations) {
   var byName = indexByFoldedName(stations);
   return favorites.map(function (f) {
-    var match = byName[util.foldName(f.name)];
+    var match = resolveStation(stations, f.name, byName);
     return match ? { id: String(match.id), name: match.name } : f;
   });
 }
 
-// Resolve which stop a departures request should fetch. The watch sends the
-// favorite's saved id plus its name; since ids are packet-scoped we trust the
-// (stable) name and map it to the current packet's id, so a tap is correct
-// even before the favorites mirror has been refreshed. Falls back to the sent
-// id when no name travels (older watch build) or the name can't be matched.
+// Resolve which stop a departures request should fetch. cb(err, liveId). The
+// watch sends the favorite's saved id plus its name; since ids are packet-scoped
+// (and even drift mid-packet) we trust the stable name and map it to the live
+// id. When a name IS sent but can't be resolved, we DON'T fall back to the sent
+// id — a stale packet-scoped id now points at a different stop, so showing its
+// board would be silently wrong; surface an error (-> offline board) instead.
+// The sent id is only trusted when no name travels (older watch build) or the
+// station list can't be fetched at all (offline best-effort).
 function resolveStopId(sentId, stopName, cb) {
   if (!stopName) {
-    cb(sentId);
+    cb(null, sentId);
     return;
   }
   cache.getStations(function (err, stations) {
     if (err) {
-      cb(sentId);
+      cb(null, sentId);
       return;
     }
-    var match = indexByFoldedName(stations)[util.foldName(stopName)];
-    cb(match ? String(match.id) : sentId);
+    var match = resolveStation(stations, stopName);
+    if (match) {
+      cb(null, String(match.id));
+    } else {
+      cb({ type: 'api' }, null);
+    }
   });
 }
 
 Pebble.addEventListener('ready', function () {
   console.log('PKJS ready');
-  // Warm the stations cache (refetches only when the weekly packet changed)
+  // Force a fresh station list on app open: ids drift mid-packet, so this heals
+  // the favorites mirror with current ids every time the app is launched.
   cache.getStations(function (err, stations) {
     if (err) {
       console.log('stations warmup failed: ' + JSON.stringify(err));
@@ -73,7 +107,7 @@ Pebble.addEventListener('ready', function () {
     var refreshed = remapFavorites(cache.getFavorites(), stations);
     cache.setFavorites(refreshed);
     pushFavoritesToWatch(refreshed);
-  });
+  }, true);
 });
 
 Pebble.addEventListener('appmessage', function (e) {
@@ -91,7 +125,11 @@ Pebble.addEventListener('appmessage', function (e) {
     // persisted board (with the Offline badge) on error (see comm.c).
     // Re-resolve by name so a favorite whose id shifted with the weekly packet
     // still hits the right stop.
-    resolveStopId(sentId, stopName, function (liveId) {
+    resolveStopId(sentId, stopName, function (rErr, liveId) {
+      if (rErr) {
+        appmsg.sendDeparturesError(p.REQUEST_ID, appmsg.errCode(rErr));
+        return;
+      }
       departures.fetch(liveId, function (err, items, fetchedAt) {
         if (err) {
           appmsg.sendDeparturesError(p.REQUEST_ID, err);

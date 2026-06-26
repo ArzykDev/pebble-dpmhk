@@ -75,8 +75,14 @@ No auth, open CORS, JSON UTF-8. Contracts live ONLY in `src/pkjs/api.js`.
 
 Gotchas: **`datum` is `DD_MM_YYYY` with underscores**; `linka` is space-padded
 (trim it); `/odjezdy` returns a near-future window from server "now" (2–18
-rows). The API is undocumented and may change — parse defensively, fall back
-to cache, keep request volume low.
+rows). **Stop ids are reassigned WITHIN a packet, not just across the weekly
+rollover** — the backend edits a packet's station list mid-week (e.g. 187 grew
+204→205 stops, shifting every id by one), so a `/stations` list cached only by
+packet number goes silently stale and resolves favorite names to now-wrong ids
+(a tap then shows a *different* stop's board with the right header). Always
+resolve favorite name→id against a recently-fetched list (see Caching). The API
+is undocumented and may change — parse defensively, fall back to cache, keep
+request volume low.
 
 ## Layout
 
@@ -130,8 +136,14 @@ Departure boards are NEVER cached on the phone: a board is a snapshot of the
 next few minutes, so any replayed copy shows already-departed buses and stale
 delays. The online path always fetches fresh — the watch shows "Načítám..."
 until live data lands (no stale-while-revalidate flicker). Phone
-(localStorage) caches only `stations:list` (refreshed when the weekly `/packet`
-id changes) and `cfg:favorites`.
+(localStorage) caches only `stations:list` and `cfg:favorites`. The station
+list is refreshed on app open (`ready` calls `cache.getStations(cb, true)`,
+force-fresh) AND on a 30-min TTL (`stations:at` timestamp) — NOT just on the
+weekly `/packet` rollover, because the backend reassigns ids within a packet
+(see Data source). A favorite tap re-resolves name→id against this list; if the
+name can't be matched it errors to the offline board rather than fetching the
+stale watch-sent id (which now points at a different stop). On a fetch failure
+`getStations` serves the prior list so resolution still works offline.
 
 Offline fallback lives entirely on the watch (persist): key 1 = favorites
 mirror (instant first paint), key 2 = last board (4 rows, fresh boards only).

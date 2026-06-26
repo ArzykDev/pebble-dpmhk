@@ -14,7 +14,7 @@ typedef struct __attribute__((__packed__)) {
 typedef struct __attribute__((__packed__)) {
   uint8_t count;
   PersistStop stops[MAX_FAVORITES];
-} PersistFavorites;  // 1 + 6*40 = 241 bytes, under PERSIST_DATA_MAX_LENGTH
+} PersistFavorites;  // 1 + 6*42 = 253 bytes, under PERSIST_DATA_MAX_LENGTH
 
 void persist_load_favorites(void) {
   StopsModel *stops = model_stops();
@@ -24,7 +24,11 @@ void persist_load_favorites(void) {
   }
   PersistFavorites blob;
   int read = persist_read_data(PERSIST_KEY_FAVORITES, &blob, sizeof(blob));
-  if (read < 1 || blob.count > MAX_FAVORITES) {
+  // Reject a malformed blob or one written by an older NAME_LEN layout (the
+  // per-stop stride changed): a layout mismatch reads as a wrong byte length.
+  // Dropping it clears favorites until the phone re-pushes the mirror on 'ready'.
+  if (read < 1 || blob.count > MAX_FAVORITES ||
+      read != (int)(1 + blob.count * sizeof(PersistStop))) {
     stops->favorites_count = 0;
     return;
   }
@@ -63,7 +67,7 @@ typedef struct __attribute__((__packed__)) {
   char fetched_at[TIME_LEN];
   uint8_t count;
   PersistRow rows[PERSIST_BOARD_ROWS];
-} PersistBoard;  // 49 + 4*42 = 217 bytes, under PERSIST_DATA_MAX_LENGTH
+} PersistBoard;  // 51 + 4*42 = 219 bytes, under PERSIST_DATA_MAX_LENGTH
 
 void persist_store_board(void) {
   const DepartureBoard *board = model_board();
