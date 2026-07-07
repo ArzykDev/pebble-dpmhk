@@ -11,6 +11,13 @@
 #define LINE_BOX_W 40
 #define SMALL_TIME_W 44
 
+// Board reveal: each row slides REVEAL_TRAVEL units, later rows delayed by
+// REVEAL_STAGGER. Progress must run past the last staggered row or it snaps.
+#define REVEAL_TRAVEL 100
+#define REVEAL_STAGGER 18
+#define REVEAL_CAP_ROWS 4  // only the on-screen rows need to cascade
+#define REVEAL_SPAN (REVEAL_TRAVEL + REVEAL_CAP_ROWS * REVEAL_STAGGER)
+
 static Window *s_window;
 static MenuLayer *s_menu_layer;
 static StatusBarLayer *s_status_bar;
@@ -18,7 +25,7 @@ static char s_header_text[NAME_LEN + TIME_LEN + 12];
 
 // Board reveal cascade: rows slide in from the right, later rows lag behind.
 static Animation *s_reveal_anim;
-static int s_reveal;  // 0..100, 100 = fully revealed
+static int s_reveal;  // 0..REVEAL_SPAN, REVEAL_SPAN = fully revealed
 static uint8_t s_prev_count;
 // Animated "Načítám" ellipsis while a fresh board is in flight.
 static AppTimer *s_load_timer;
@@ -31,12 +38,12 @@ static void prv_mark_dirty(void) {
 }
 
 static void prv_reveal_update(Animation *anim, const AnimationProgress p) {
-  s_reveal = (p * 100) / ANIMATION_NORMALIZED_MAX;
+  s_reveal = (p * REVEAL_SPAN) / ANIMATION_NORMALIZED_MAX;
   prv_mark_dirty();
 }
 
 static void prv_reveal_stopped(Animation *anim, bool finished, void *context) {
-  s_reveal = 100;
+  s_reveal = REVEAL_SPAN;
   s_reveal_anim = NULL;  // auto-destroyed by the framework
   prv_mark_dirty();
 }
@@ -53,7 +60,7 @@ static void prv_start_reveal(void) {
   s_reveal = 0;
   Animation *a = animation_create();
   animation_set_implementation(a, &s_reveal_impl);
-  animation_set_duration(a, 320);
+  animation_set_duration(a, 400);
   animation_set_curve(a, AnimationCurveEaseOut);
   animation_set_handlers(a, (AnimationHandlers){.stopped = prv_reveal_stopped},
                          NULL);
@@ -61,16 +68,21 @@ static void prv_start_reveal(void) {
   animation_schedule(a);
 }
 
-// Horizontal slide-in offset for a row given the global reveal progress.
+// Horizontal slide-in offset for a row given the global reveal progress. Each
+// row's local progress is the shared progress minus its stagger, clamped to a
+// full 0..REVEAL_TRAVEL so every row lands flush (offset 0) by the end.
 static int prv_reveal_offset(int row, int width) {
-  if (s_reveal >= 100) {
+  if (s_reveal >= REVEAL_SPAN) {
     return 0;
   }
-  int local = s_reveal - row * 18;  // later rows start later
+  int r = row < REVEAL_CAP_ROWS ? row : REVEAL_CAP_ROWS;
+  int local = s_reveal - r * REVEAL_STAGGER;
   if (local < 0) {
     local = 0;
+  } else if (local > REVEAL_TRAVEL) {
+    local = REVEAL_TRAVEL;
   }
-  return width * (100 - local) / 100;
+  return width * (REVEAL_TRAVEL - local) / REVEAL_TRAVEL;
 }
 
 static void prv_load_tick(void *data) {
@@ -291,7 +303,7 @@ static void prv_window_load(Window *window) {
                                       StatusBarLayerSeparatorModeDotted);
   layer_add_child(window_layer, status_bar_layer_get_layer(s_status_bar));
 
-  s_reveal = 100;
+  s_reveal = REVEAL_SPAN;
   s_prev_count = 0;
   comm_set_board_handler(prv_board_updated);
   tick_timer_service_subscribe(MINUTE_UNIT, prv_minute_tick);
