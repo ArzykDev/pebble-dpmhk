@@ -3,6 +3,7 @@
 #include "../comm.h"
 #include "../model.h"
 #include "../strings.h"
+#include "../ui_theme.h"
 #include "departures_window.h"
 
 #define SECTION_FAVORITES 0
@@ -127,6 +128,7 @@ static void prv_window_load(Window *window) {
 #if defined(PBL_ROUND)
   menu_layer_set_center_focused(s_menu_layer, true);
 #endif
+  theme_apply_menu(s_menu_layer);
   menu_layer_set_click_config_onto_window(s_menu_layer, window);
   layer_add_child(window_layer, menu_layer_get_layer(s_menu_layer));
 
