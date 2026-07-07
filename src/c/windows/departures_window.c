@@ -16,9 +16,88 @@ static MenuLayer *s_menu_layer;
 static StatusBarLayer *s_status_bar;
 static char s_header_text[NAME_LEN + TIME_LEN + 12];
 
+// Board reveal cascade: rows slide in from the right, later rows lag behind.
+static Animation *s_reveal_anim;
+static int s_reveal;  // 0..100, 100 = fully revealed
+static uint8_t s_prev_count;
+// Animated "Načítám" ellipsis while a fresh board is in flight.
+static AppTimer *s_load_timer;
+static uint8_t s_load_phase;
+
+static void prv_mark_dirty(void) {
+  if (s_menu_layer) {
+    layer_mark_dirty(menu_layer_get_layer(s_menu_layer));
+  }
+}
+
+static void prv_reveal_update(Animation *anim, const AnimationProgress p) {
+  s_reveal = (p * 100) / ANIMATION_NORMALIZED_MAX;
+  prv_mark_dirty();
+}
+
+static void prv_reveal_stopped(Animation *anim, bool finished, void *context) {
+  s_reveal = 100;
+  s_reveal_anim = NULL;  // auto-destroyed by the framework
+  prv_mark_dirty();
+}
+
+static const AnimationImplementation s_reveal_impl = {
+    .update = prv_reveal_update,
+};
+
+static void prv_start_reveal(void) {
+  if (s_reveal_anim) {
+    animation_unschedule(s_reveal_anim);  // frees the previous one
+    s_reveal_anim = NULL;
+  }
+  s_reveal = 0;
+  Animation *a = animation_create();
+  animation_set_implementation(a, &s_reveal_impl);
+  animation_set_duration(a, 320);
+  animation_set_curve(a, AnimationCurveEaseOut);
+  animation_set_handlers(a, (AnimationHandlers){.stopped = prv_reveal_stopped},
+                         NULL);
+  s_reveal_anim = a;
+  animation_schedule(a);
+}
+
+// Horizontal slide-in offset for a row given the global reveal progress.
+static int prv_reveal_offset(int row, int width) {
+  if (s_reveal >= 100) {
+    return 0;
+  }
+  int local = s_reveal - row * 18;  // later rows start later
+  if (local < 0) {
+    local = 0;
+  }
+  return width * (100 - local) / 100;
+}
+
+static void prv_load_tick(void *data) {
+  s_load_timer = NULL;
+  const DepartureBoard *board = model_board();
+  if (board->count == 0 && board->loading) {
+    s_load_phase = (s_load_phase + 1) % 4;
+    prv_mark_dirty();
+    s_load_timer = app_timer_register(400, prv_load_tick, NULL);
+  }
+}
+
+static void prv_maybe_start_load_anim(const DepartureBoard *board) {
+  if (board->count == 0 && board->loading && !s_load_timer) {
+    s_load_phase = 0;
+    s_load_timer = app_timer_register(400, prv_load_tick, NULL);
+  }
+}
+
 static const char *prv_status_message(const DepartureBoard *board) {
   if (board->error == ERR_NONE || board->error == ERR_GPS) {
-    return board->loading ? STR_LOADING : STR_NO_DEPARTURES;
+    if (!board->loading) {
+      return STR_NO_DEPARTURES;
+    }
+    static char buf[16];
+    snprintf(buf, sizeof(buf), "%s%.*s", STR_LOADING_BASE, s_load_phase, "...");
+    return buf;
   }
   return STR_CONN_ERROR;
 }
@@ -86,9 +165,10 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
 
   const Departure *dep = &board->items[cell_index->row];
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+  int ox = prv_reveal_offset(cell_index->row, bounds.size.w);
 
   // Top-left: colored line badge
-  theme_draw_line_badge(ctx, GRect(MARGIN, 0, LINE_BOX_W, 26), dep->line,
+  theme_draw_line_badge(ctx, GRect(MARGIN + ox, 0, LINE_BOX_W, 26), dep->line,
                         highlighted);
 
   // Top-right: relative countdown (leads); the absolute time follows small
@@ -121,7 +201,8 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   int right_x = MARGIN + LINE_BOX_W + 2;
   graphics_context_set_text_color(ctx, big_color);
   graphics_draw_text(ctx, big, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(right_x, -4, bounds.size.w - right_x - MARGIN, 28),
+                     GRect(right_x + ox, -4, bounds.size.w - right_x - MARGIN,
+                           28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
                      NULL);
 
@@ -129,12 +210,12 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   int dest_w = bounds.size.w - 2 * MARGIN - (show_clock ? SMALL_TIME_W : 0);
   graphics_context_set_text_color(ctx, sub_color);
   graphics_draw_text(ctx, dep->dest, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                     GRect(MARGIN, 20, dest_w, 22),
+                     GRect(MARGIN + ox, 20, dest_w, 22),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
   if (show_clock) {
     graphics_draw_text(ctx, dep->time, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                       GRect(bounds.size.w - MARGIN - SMALL_TIME_W, 20,
+                       GRect(bounds.size.w - MARGIN - SMALL_TIME_W + ox, 20,
                              SMALL_TIME_W, 22),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
                        NULL);
@@ -161,6 +242,14 @@ static void prv_select_long_click(MenuLayer *menu_layer, MenuIndex *cell_index,
 }
 
 static void prv_board_updated(void) {
+  const DepartureBoard *board = model_board();
+  // First rows of a fresh (non-offline) load just landed — cascade them in.
+  if (s_prev_count == 0 && board->count > 0 &&
+      !(board->flags & BOARD_FLAG_CACHED)) {
+    prv_start_reveal();
+  }
+  s_prev_count = board->count;
+  prv_maybe_start_load_anim(board);
   if (s_menu_layer) {
     menu_layer_reload_data(s_menu_layer);
   }
@@ -202,11 +291,21 @@ static void prv_window_load(Window *window) {
                                       StatusBarLayerSeparatorModeDotted);
   layer_add_child(window_layer, status_bar_layer_get_layer(s_status_bar));
 
+  s_reveal = 100;
+  s_prev_count = 0;
   comm_set_board_handler(prv_board_updated);
   tick_timer_service_subscribe(MINUTE_UNIT, prv_minute_tick);
 }
 
 static void prv_window_unload(Window *window) {
+  if (s_reveal_anim) {
+    animation_unschedule(s_reveal_anim);
+    s_reveal_anim = NULL;
+  }
+  if (s_load_timer) {
+    app_timer_cancel(s_load_timer);
+    s_load_timer = NULL;
+  }
   tick_timer_service_unsubscribe();
   comm_set_board_handler(NULL);
   status_bar_layer_destroy(s_status_bar);

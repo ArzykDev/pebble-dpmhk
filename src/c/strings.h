@@ -7,6 +7,7 @@
 #define STR_NEAREST       "Nejbližší"
 #define STR_FIND_NEAREST  "Najít polohou..."
 #define STR_LOADING       "Načítám..."
+#define STR_LOADING_BASE  "Načítám"
 #define STR_NOW           "teď"
 #define STR_MIN_FMT       "%d min"
 #define STR_DEPARTED      "odjel"
