@@ -59,8 +59,36 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
     return;
   }
 
-  menu_cell_basic_draw(ctx, cell_layer, trip->stops[cell_index->row], NULL,
-                       NULL);
+  bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+  int mid_y = bounds.size.h / 2;
+  int spine_x = MARGIN + 5;
+  GColor accent =
+      highlighted ? GColorWhite
+                  : PBL_IF_COLOR_ELSE(theme_line_color(trip->line), GColorBlack);
+
+  // Route spine: a continuous line down the column, capped at the first/last
+  // stop so the diagram reads as an ordered path.
+  graphics_context_set_stroke_color(ctx, accent);
+  graphics_context_set_stroke_width(ctx, 3);
+  int top = (cell_index->row == 0) ? mid_y : 0;
+  int bot = (cell_index->row == trip->count - 1) ? mid_y : bounds.size.h;
+  graphics_draw_line(ctx, GPoint(spine_x, top), GPoint(spine_x, bot));
+
+  // Station marker: a filled node, hollowed to a ring on normal rows
+  graphics_context_set_fill_color(ctx, accent);
+  graphics_fill_circle(ctx, GPoint(spine_x, mid_y), 5);
+  if (!highlighted) {
+    graphics_context_set_fill_color(ctx, GColorWhite);
+    graphics_fill_circle(ctx, GPoint(spine_x, mid_y), 2);
+  }
+
+  int name_x = spine_x + 12;
+  graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
+  graphics_draw_text(ctx, trip->stops[cell_index->row],
+                     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+                     GRect(name_x, 2, bounds.size.w - name_x - MARGIN, 28),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
+                     NULL);
 }
 
 static void prv_trip_updated(void) {
