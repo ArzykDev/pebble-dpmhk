@@ -9,7 +9,7 @@
 #define STATUS_ROW_HEIGHT 32
 #define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 #define LINE_BOX_W 40
-#define TIME_BOX_W 56
+#define SMALL_TIME_W 44
 
 static Window *s_window;
 static MenuLayer *s_menu_layer;
@@ -87,27 +87,58 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   const Departure *dep = &board->items[cell_index->row];
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
 
-  // Top row: line number (left, bold) + departure time (right, bold)
-  graphics_draw_text(ctx, dep->line,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(MARGIN, -4, LINE_BOX_W, 28),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
-                     NULL);
-  graphics_context_set_text_color(ctx, prv_time_color(dep, highlighted));
-  graphics_draw_text(ctx, dep->time,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(bounds.size.w - TIME_BOX_W - MARGIN, -4, TIME_BOX_W,
-                           28),
+  // Top-left: colored line badge
+  theme_draw_line_badge(ctx, GRect(MARGIN, 0, LINE_BOX_W, 26), dep->line,
+                        highlighted);
+
+  // Top-right: relative countdown (leads); the absolute time follows small
+  // below. Past 60 min the countdown loses its edge, so show the clock instead.
+  int mins = theme_minutes_until(dep->time);
+  char big[16];
+  bool departed = false;
+  bool show_clock = false;  // small absolute time on the bottom row
+  if (mins == THEME_MIN_INVALID || mins >= 60) {
+    snprintf(big, sizeof(big), "%s", dep->time);
+  } else if (mins < 0) {
+    departed = true;
+    show_clock = true;
+    snprintf(big, sizeof(big), "%s", STR_DEPARTED);
+  } else if (mins == 0) {
+    show_clock = true;
+    snprintf(big, sizeof(big), "%s", STR_NOW);
+  } else {
+    show_clock = true;
+    snprintf(big, sizeof(big), STR_MIN_FMT, mins);
+  }
+
+  GColor big_color = highlighted ? GColorWhite
+                     : departed  ? PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
+                                 : prv_time_color(dep, highlighted);
+  GColor sub_color = highlighted ? GColorWhite
+                     : departed  ? PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
+                                 : GColorBlack;
+
+  int right_x = MARGIN + LINE_BOX_W + 2;
+  graphics_context_set_text_color(ctx, big_color);
+  graphics_draw_text(ctx, big, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+                     GRect(right_x, -4, bounds.size.w - right_x - MARGIN, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
                      NULL);
-  graphics_context_set_text_color(ctx,
-                                  highlighted ? GColorWhite : GColorBlack);
-  // Bottom row: destination
-  graphics_draw_text(ctx, dep->dest,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                     GRect(MARGIN, 20, bounds.size.w - 2 * MARGIN, 22),
+
+  // Bottom row: destination (left) + small absolute time (right)
+  int dest_w = bounds.size.w - 2 * MARGIN - (show_clock ? SMALL_TIME_W : 0);
+  graphics_context_set_text_color(ctx, sub_color);
+  graphics_draw_text(ctx, dep->dest, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                     GRect(MARGIN, 20, dest_w, 22),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
+  if (show_clock) {
+    graphics_draw_text(ctx, dep->time, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                       GRect(bounds.size.w - MARGIN - SMALL_TIME_W, 20,
+                             SMALL_TIME_W, 22),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
+                       NULL);
+  }
 }
 
 static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
@@ -130,6 +161,14 @@ static void prv_select_long_click(MenuLayer *menu_layer, MenuIndex *cell_index,
 }
 
 static void prv_board_updated(void) {
+  if (s_menu_layer) {
+    menu_layer_reload_data(s_menu_layer);
+  }
+}
+
+// Re-render each minute so the countdowns keep ticking (including the offline
+// board, which counts down from its persisted times).
+static void prv_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
   if (s_menu_layer) {
     menu_layer_reload_data(s_menu_layer);
   }
@@ -164,9 +203,11 @@ static void prv_window_load(Window *window) {
   layer_add_child(window_layer, status_bar_layer_get_layer(s_status_bar));
 
   comm_set_board_handler(prv_board_updated);
+  tick_timer_service_subscribe(MINUTE_UNIT, prv_minute_tick);
 }
 
 static void prv_window_unload(Window *window) {
+  tick_timer_service_unsubscribe();
   comm_set_board_handler(NULL);
   status_bar_layer_destroy(s_status_bar);
   menu_layer_destroy(s_menu_layer);
