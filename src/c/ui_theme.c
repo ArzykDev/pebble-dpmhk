@@ -1,8 +1,8 @@
 #include "ui_theme.h"
 
-// Branded selection color. DPMHK's identity is orange; degrades to the default
-// black highlight on mono.
-#define THEME_ACCENT PBL_IF_COLOR_ELSE(GColorOrange, GColorBlack)
+// Selection highlight: a dark near-neutral so the colored line badges pop
+// against it rather than clashing (a saturated bar would fight the badges).
+#define THEME_ACCENT PBL_IF_COLOR_ELSE(GColorOxfordBlue, GColorBlack)
 
 GColor theme_line_color(const char *line) {
 #if defined(PBL_COLOR)
@@ -30,7 +30,10 @@ void theme_draw_line_badge(GContext *ctx, GRect rect, const char *line,
                            bool highlighted) {
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
 #if defined(PBL_COLOR)
-  (void)highlighted;
+  // On the (dark) highlighted row the dark badge would vanish, so invert it:
+  // a white chip carrying the line color as the number.
+  GColor chip_color = highlighted ? GColorWhite : theme_line_color(line);
+  GColor text_color = highlighted ? theme_line_color(line) : GColorWhite;
   GSize ts = graphics_text_layout_get_content_size(
       line, font, rect, GTextOverflowModeFill, GTextAlignmentLeft);
   int chip_h = 26;
@@ -40,9 +43,9 @@ void theme_draw_line_badge(GContext *ctx, GRect rect, const char *line,
   }
   GRect chip = GRect(rect.origin.x, rect.origin.y + (rect.size.h - chip_h) / 2,
                      chip_w, chip_h);
-  graphics_context_set_fill_color(ctx, theme_line_color(line));
+  graphics_context_set_fill_color(ctx, chip_color);
   graphics_fill_rect(ctx, chip, 4, GCornersAll);
-  graphics_context_set_text_color(ctx, GColorWhite);
+  graphics_context_set_text_color(ctx, text_color);
   graphics_draw_text(ctx, line, font,
                      GRect(chip.origin.x, chip.origin.y - 4, chip.size.w,
                            chip.size.h),
