@@ -5,7 +5,7 @@
 #include "../ui_theme.h"
 #include "trip_window.h"
 
-#define ROW_HEIGHT 44
+#define ROW_HEIGHT 52
 #define STATUS_ROW_HEIGHT 32
 #define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 #define LINE_BOX_W 40
@@ -179,8 +179,8 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   int ox = prv_reveal_offset(cell_index->row, bounds.size.w);
 
-  // Top-left: colored line badge
-  theme_draw_line_badge(ctx, GRect(MARGIN + ox, 0, LINE_BOX_W, 26), dep->line,
+  // Top-left: colored line badge (padded off the top edge to breathe)
+  theme_draw_line_badge(ctx, GRect(MARGIN + ox, 5, LINE_BOX_W, 26), dep->line,
                         highlighted);
 
   // Top-right: relative countdown (leads); the absolute time follows small
@@ -213,7 +213,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   int right_x = MARGIN + LINE_BOX_W + 2;
   graphics_context_set_text_color(ctx, big_color);
   graphics_draw_text(ctx, big, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(right_x + ox, -4, bounds.size.w - right_x - MARGIN,
+                     GRect(right_x + ox, 1, bounds.size.w - right_x - MARGIN,
                            28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
                      NULL);
@@ -222,12 +222,12 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   int dest_w = bounds.size.w - 2 * MARGIN - (show_clock ? SMALL_TIME_W : 0);
   graphics_context_set_text_color(ctx, sub_color);
   graphics_draw_text(ctx, dep->dest, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                     GRect(MARGIN + ox, 20, dest_w, 22),
+                     GRect(MARGIN + ox, 30, dest_w, 22),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
   if (show_clock) {
     graphics_draw_text(ctx, dep->time, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                       GRect(bounds.size.w - MARGIN - SMALL_TIME_W + ox, 20,
+                       GRect(bounds.size.w - MARGIN - SMALL_TIME_W + ox, 30,
                              SMALL_TIME_W, 22),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
                        NULL);
