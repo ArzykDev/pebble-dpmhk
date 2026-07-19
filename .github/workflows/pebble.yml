@@ -66,18 +66,35 @@ jobs:
           uv tool install pebble-tool --python 3.13
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      # Resolve which concrete version "latest" currently points to, via the same
+      # server pebble-tool downloads from, so the cache key tracks SDK releases
+      # automatically instead of needing a manual bump. (Undocumented endpoint —
+      # mirrors sdk_manager.install_remote_sdk; update here if pebble-tool moves it.)
+      - name: Resolve latest Pebble SDK version
+        id: sdk-version
+        run: |
+          ver="$(curl -fsSL --retry 3 --retry-delay 2 \
+            'https://sdk.repebble.com/v1/files/sdk-core/latest?channel=' | jq -r .version)"
+          if [ -z "$ver" ] || [ "$ver" = "null" ]; then
+            echo "::error::could not resolve latest Pebble SDK version"
+            exit 1
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "Latest Pebble SDK: $ver"
+
       # ~/.local/share/pebble-sdk holds the SDK core, arm toolchain and QEMU
-      # (~1.6 G). Cache it so runs after the first stay fast. Bump the key
-      # suffix to force a refresh onto a newer SDK.
+      # (~1.6 G). Cache it so runs after the first stay fast. The key carries the
+      # resolved version, so a new SDK release auto-invalidates the cache.
       - name: Cache Pebble SDK
         id: sdk-cache
         uses: actions/cache@v5
         with:
           path: ~/.local/share/pebble-sdk
-          key: pebble-sdk-${{ runner.os }}-v1
+          key: pebble-sdk-${{ runner.os }}-${{ steps.sdk-version.outputs.version }}
 
-      # `pebble sdk install latest` exits 1 if the SDK is already present, so
-      # only run it on a cache miss. Bump the cache key above to pull a newer SDK.
+      # `pebble sdk install latest` exits 1 if that exact version is already
+      # present, so only run it on a cache miss. A newer SDK changes the cache key
+      # above, which forces the miss and pulls it.
       - name: Install Pebble SDK
         if: steps.sdk-cache.outputs.cache-hit != 'true'
         run: pebble sdk install latest
