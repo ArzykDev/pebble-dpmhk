@@ -1,6 +1,6 @@
 # MHD HK
 
-[![Build](https://github.com/Kedlub/pebble-dpmhk/actions/workflows/pebble.yml/badge.svg)](https://github.com/Kedlub/pebble-dpmhk/actions/workflows/pebble.yml)
+[![Build](https://github.com/ArzykDev/pebble-dpmhk/actions/workflows/pebble.yml/badge.svg)](https://github.com/ArzykDev/pebble-dpmhk/actions/workflows/pebble.yml)
 
 Pebble watchapp showing live bus and trolleybus departures for Hradec
 Králové (DPMHK). Open the app and see the next departures (line,
@@ -47,7 +47,7 @@ git push origin v1.1.0
 ```
 
 The tagged build attaches the installable `.pbw` to a
-[GitHub Release](https://github.com/Kedlub/pebble-dpmhk/releases).
+[GitHub Release](https://github.com/ArzykDev/pebble-dpmhk/releases).
 
 ## Data source
 
