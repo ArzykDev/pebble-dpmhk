@@ -1,6 +1,7 @@
 #include "ui_theme.h"
 
 #include "model.h"
+#include "strings.h"
 
 // Selection highlight: a dark near-neutral so the colored line badges pop
 // against it rather than clashing (a saturated bar would fight the badges).
@@ -134,6 +135,100 @@ void theme_draw_star(GContext *ctx, GPoint c, int r, GColor color) {
   graphics_context_set_fill_color(ctx, color);
   gpath_draw_filled(ctx, path);
   gpath_destroy(path);
+}
+
+#if !defined(PBL_PLATFORM_APLITE)
+// The system icons are drawn black on white; swap to the row's highlight
+// colors so they stay visible on the selection bar.
+static bool prv_invert_command(GDrawCommand *command, uint32_t index,
+                               void *context) {
+  GColor stroke = gdraw_command_get_stroke_color(command);
+  GColor fill = gdraw_command_get_fill_color(command);
+  if (gcolor_equal(stroke, GColorBlack)) {
+    gdraw_command_set_stroke_color(command, GColorWhite);
+  }
+  if (gcolor_equal(fill, GColorWhite)) {
+    gdraw_command_set_fill_color(command, THEME_ACCENT);
+  }
+  return true;
+}
+#endif
+
+// ponytail: loads and frees the resource on every draw (a few hundred bytes);
+// cache per window if redraw cost ever shows up.
+GSize theme_draw_icon(GContext *ctx, uint32_t resource_id, GPoint origin,
+                      bool highlighted) {
+#if defined(PBL_PLATFORM_APLITE)
+  GBitmap *bmp = gbitmap_create_with_resource(resource_id);
+  if (!bmp) {
+    return GSizeZero;
+  }
+  GSize size = gbitmap_get_bounds(bmp).size;
+  // PNG resources load as 1BitPalette, which ignores inverted compositing, so
+  // invert through the (per-draw, owned) palette instead.
+  GColor *palette = gbitmap_get_palette(bmp);
+  if (highlighted && palette) {
+    for (int i = 0; i < 2; i++) {
+      palette[i] = gcolor_equal(palette[i], GColorBlack) ? GColorWhite
+                                                         : GColorBlack;
+    }
+  }
+  graphics_context_set_compositing_mode(ctx, GCompOpAssign);
+  graphics_draw_bitmap_in_rect(ctx, bmp, (GRect){.origin = origin, .size = size});
+  gbitmap_destroy(bmp);
+#else
+  GDrawCommandImage *img = gdraw_command_image_create_with_resource(resource_id);
+  if (!img) {
+    return GSizeZero;
+  }
+  GSize size = gdraw_command_image_get_bounds_size(img);
+  if (highlighted) {
+    gdraw_command_list_iterate(gdraw_command_image_get_command_list(img),
+                               prv_invert_command, NULL);
+  }
+  gdraw_command_image_draw(ctx, img, origin);
+  gdraw_command_image_destroy(img);
+#endif
+  return size;
+}
+
+void theme_draw_status(GContext *ctx, GRect rect, uint32_t resource_id,
+                       const char *text) {
+  // A plain card over the selection bar, like the system's empty states
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, rect, 0, GCornerNone);
+
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+  const int icon_size = 50;  // every status icon is a 50x50 system icon
+  const int gap = 6;
+  int text_w = rect.size.w - 2 * PBL_IF_ROUND_ELSE(18, 8);
+  GSize ts = graphics_text_layout_get_content_size(
+      text, font, GRect(0, 0, text_w, 48), GTextOverflowModeWordWrap,
+      GTextAlignmentCenter);
+  int h = ts.h + (resource_id ? icon_size + gap : 0);
+  int y = rect.origin.y + (rect.size.h - h) / 2;
+  if (resource_id) {
+    theme_draw_icon(ctx, resource_id,
+                    GPoint(rect.origin.x + (rect.size.w - icon_size) / 2, y),
+                    false);
+    y += icon_size + gap;
+  }
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, text, font,
+                     GRect(rect.origin.x + (rect.size.w - text_w) / 2, y - 4,
+                           text_w, ts.h + 4),
+                     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+}
+
+const char *theme_error_status(bool small, uint32_t *icon) {
+  if (!connection_service_peek_pebble_app_connection()) {
+    *icon = small ? RESOURCE_ID_ICON_SMALL_WARNING
+                  : RESOURCE_ID_ICON_STATUS_DISCONNECTED;
+    return STR_NO_PHONE;
+  }
+  *icon = small ? RESOURCE_ID_ICON_SMALL_WARNING
+                : RESOURCE_ID_ICON_STATUS_NO_CONNECTION;
+  return STR_CONN_ERROR;
 }
 
 void theme_apply_menu(MenuLayer *menu) {

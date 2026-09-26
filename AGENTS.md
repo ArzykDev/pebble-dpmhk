@@ -101,6 +101,9 @@ src/c/comm.c           ALL app_message_* usage; request/response protocol
 src/c/model.c|h        Departure/StopRef/DepartureBoard structs + static stores
 src/c/persist.c        watch storage: favorites mirror + last board (≤256 B/key)
 src/c/strings.h        every Czech UI string (UTF-8 literals)
+src/c/ui_theme.c       line colours/chips, star, system-icon empty states
+resources/images/      menu icon + PebbleOS status icons (.pdc; -aplite.png
+                       1-bit fallbacks — aplite can't draw PDC)
 src/c/windows/         stops_window (Oblíbené+Nejbližší), departures_window,
                        trip_window (downstream stops of a tapped departure)
 src/pkjs/index.js      'ready'/'appmessage' router + Clay wiring

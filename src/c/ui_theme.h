@@ -24,6 +24,21 @@ void theme_draw_star(GContext *ctx, GPoint c, int r, GColor color);
 void theme_draw_line_chips(GContext *ctx, GRect rect, const char *lines,
                            bool highlighted);
 
+// Draw a PebbleOS system icon resource (PDC; a 1-bit PNG on aplite) with its
+// top-left at origin, recolored for a highlighted row. Returns its size.
+GSize theme_draw_icon(GContext *ctx, uint32_t resource_id, GPoint origin,
+                      bool highlighted);
+
+// Full-row empty/error state: a plain card with the icon centered above the
+// text (resource_id 0 = text only, e.g. the animated loading message).
+void theme_draw_status(GContext *ctx, GRect rect, uint32_t resource_id,
+                       const char *text);
+
+// Error text for a failed fetch: a dead phone link reads differently from a
+// phone that is up but can't reach the API. Sets *icon to the matching
+// status (large) or small icon.
+const char *theme_error_status(bool small, uint32_t *icon);
+
 // Apply the DPMHK-branded selection highlight to a menu (works on every
 // platform; degrades to black/white on mono).
 void theme_apply_menu(MenuLayer *menu);

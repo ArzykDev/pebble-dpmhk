@@ -110,16 +110,19 @@ static void prv_maybe_start_load_anim(const DepartureBoard *board) {
   }
 }
 
-static const char *prv_status_message(const DepartureBoard *board) {
+static const char *prv_status_message(const DepartureBoard *board,
+                                      uint32_t *icon) {
   if (board->error == ERR_NONE || board->error == ERR_GPS) {
     if (!board->loading) {
+      *icon = RESOURCE_ID_ICON_STATUS_NO_DEPARTURES;
       return STR_NO_DEPARTURES;
     }
     static char buf[16];
     snprintf(buf, sizeof(buf), "%s%.*s", STR_LOADING_BASE, s_load_phase, "...");
+    *icon = 0;
     return buf;
   }
-  return STR_CONN_ERROR;
+  return theme_error_status(false, icon);
 }
 
 // Match by name: favorite ids go stale when the backend reassigns them.
@@ -152,7 +155,13 @@ static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
   if (cell_index->section == SECTION_ACTIONS) {
     return ACTION_ROW_HEIGHT;
   }
-  return model_board()->count > 0 ? ROW_HEIGHT : STATUS_ROW_HEIGHT;
+  if (model_board()->count > 0) {
+    return ROW_HEIGHT;
+  }
+  // The empty state fills the screen, leaving the Obnovit row peeking below
+  GRect frame = layer_get_bounds(menu_layer_get_layer(menu_layer));
+  int h = frame.size.h - MENU_CELL_BASIC_HEADER_HEIGHT - ACTION_ROW_HEIGHT;
+  return h > STATUS_ROW_HEIGHT ? h : STATUS_ROW_HEIGHT;
 }
 
 static int16_t prv_get_header_height(MenuLayer *menu_layer,
@@ -229,11 +238,9 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   GRect bounds = layer_get_bounds(cell_layer);
 
   if (board->count == 0) {
-    graphics_draw_text(ctx, prv_status_message(board),
-                       fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                       GRect(MARGIN, 2, bounds.size.w - 2 * MARGIN, 24),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter,
-                       NULL);
+    uint32_t icon;
+    const char *text = prv_status_message(board, &icon);
+    theme_draw_status(ctx, bounds, icon, text);
     return;
   }
 

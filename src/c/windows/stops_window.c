@@ -17,17 +17,40 @@ static Window *s_window;
 static MenuLayer *s_menu_layer;
 static StatusBarLayer *s_status_bar;
 
-static const char *prv_nearest_status(const StopsModel *stops) {
+static const char *prv_nearest_status(const StopsModel *stops,
+                                      uint32_t *icon) {
+  *icon = RESOURCE_ID_ICON_SMALL_LOCATION;
   if (stops->nearest_loading) {
+    *icon = 0;
     return STR_LOADING;
   }
   if (stops->nearest_error == ERR_GPS) {
     return STR_NO_LOCATION;
   }
   if (stops->nearest_error != ERR_NONE) {
-    return STR_CONN_ERROR;
+    return theme_error_status(true, icon);
   }
   return STR_FIND_NEAREST;
+}
+
+// Inline status row: small system icon left of the text
+static void prv_draw_status(GContext *ctx, const Layer *cell_layer,
+                            uint32_t icon, const char *text) {
+  GRect bounds = layer_get_bounds(cell_layer);
+  bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+  const int icon_size = 25;
+  int x = MARGIN + 2;
+  if (icon) {
+    theme_draw_icon(ctx, icon,
+                    GPoint(x, (bounds.size.h - icon_size) / 2), highlighted);
+    x += icon_size + 6;
+  }
+  graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
+  graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(x, (bounds.size.h - 24) / 2,
+                           bounds.size.w - x - MARGIN, 24),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
+                     NULL);
 }
 
 static uint16_t prv_get_num_sections(MenuLayer *menu_layer, void *context) {
@@ -121,15 +144,17 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   const StopsModel *stops = model_stops();
   if (cell_index->section == SECTION_FAVORITES) {
     if (stops->favorites_count == 0) {
-      menu_cell_basic_draw(ctx, cell_layer, STR_NO_FAVORITES, NULL, NULL);
+      prv_draw_status(ctx, cell_layer, RESOURCE_ID_ICON_SMALL_QUESTION,
+                      STR_NO_FAVORITES);
     } else {
       prv_draw_stop(ctx, cell_layer, &stops->favorites[cell_index->row],
                     false);
     }
   } else {
     if (stops->nearest_count == 0) {
-      menu_cell_basic_draw(ctx, cell_layer, prv_nearest_status(stops), NULL,
-                           NULL);
+      uint32_t icon;
+      const char *text = prv_nearest_status(stops, &icon);
+      prv_draw_status(ctx, cell_layer, icon, text);
     } else {
       const StopRef *stop = &stops->nearest[cell_index->row];
       prv_draw_stop(ctx, cell_layer, stop, prv_is_favorite(stops, stop->name));

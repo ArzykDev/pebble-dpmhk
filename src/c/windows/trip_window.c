@@ -6,7 +6,6 @@
 #include "../ui_theme.h"
 
 #define ROW_HEIGHT 32
-#define STATUS_ROW_HEIGHT 32
 #define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 
 static Window *s_window;
@@ -14,11 +13,16 @@ static MenuLayer *s_menu_layer;
 static StatusBarLayer *s_status_bar;
 static char s_header_text[LINE_LEN + DEST_LEN + 8];
 
-static const char *prv_status_message(const TripModel *trip) {
+static const char *prv_status_message(const TripModel *trip, uint32_t *icon) {
   if (trip->error != ERR_NONE) {
-    return STR_CONN_ERROR;
+    return theme_error_status(false, icon);
   }
-  return trip->loading ? STR_LOADING : STR_TRIP_EMPTY;
+  if (trip->loading) {
+    *icon = 0;
+    return STR_LOADING;
+  }
+  *icon = RESOURCE_ID_ICON_STATUS_WARNING;
+  return STR_TRIP_EMPTY;
 }
 
 static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
@@ -29,7 +33,12 @@ static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
 
 static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
                                    void *context) {
-  return model_trip()->count > 0 ? ROW_HEIGHT : STATUS_ROW_HEIGHT;
+  if (model_trip()->count > 0) {
+    return ROW_HEIGHT;
+  }
+  // The empty state fills the screen below the header
+  GRect frame = layer_get_bounds(menu_layer_get_layer(menu_layer));
+  return frame.size.h - MENU_CELL_BASIC_HEADER_HEIGHT;
 }
 
 static int16_t prv_get_header_height(MenuLayer *menu_layer,
@@ -51,11 +60,9 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   GRect bounds = layer_get_bounds(cell_layer);
 
   if (trip->count == 0) {
-    graphics_draw_text(ctx, prv_status_message(trip),
-                       fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                       GRect(MARGIN, 2, bounds.size.w - 2 * MARGIN, 24),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter,
-                       NULL);
+    uint32_t icon;
+    const char *text = prv_status_message(trip, &icon);
+    theme_draw_status(ctx, bounds, icon, text);
     return;
   }
 
