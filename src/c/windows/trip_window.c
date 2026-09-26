@@ -15,7 +15,7 @@ static char s_header_text[LINE_LEN + DEST_LEN + 8];
 
 static const char *prv_status_message(const TripModel *trip, uint32_t *icon) {
   if (trip->error != ERR_NONE) {
-    return theme_error_status(false, icon);
+    return theme_error_status(trip->error, false, icon);
   }
   if (trip->loading) {
     *icon = 0;

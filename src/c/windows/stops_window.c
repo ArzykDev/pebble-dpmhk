@@ -28,7 +28,7 @@ static const char *prv_nearest_status(const StopsModel *stops,
     return STR_NO_LOCATION;
   }
   if (stops->nearest_error != ERR_NONE) {
-    return theme_error_status(true, icon);
+    return theme_error_status(stops->nearest_error, true, icon);
   }
   return STR_FIND_NEAREST;
 }
@@ -66,26 +66,13 @@ static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
   return stops->nearest_count > 0 ? stops->nearest_count : 1;
 }
 
-static bool prv_has_stop(const StopsModel *stops, uint16_t section) {
-  return section == SECTION_FAVORITES ? stops->favorites_count > 0
-                                      : stops->nearest_count > 0;
-}
-
 static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
                                    void *context) {
-  return prv_has_stop(model_stops(), cell_index->section)
-             ? STOP_ROW_HEIGHT
-             : STATUS_ROW_HEIGHT;
-}
-
-// Match by name: favorite ids go stale when the backend reassigns them.
-static bool prv_is_favorite(const StopsModel *stops, const char *name) {
-  for (int i = 0; i < stops->favorites_count; i++) {
-    if (strcmp(stops->favorites[i].name, name) == 0) {
-      return true;
-    }
-  }
-  return false;
+  const StopsModel *stops = model_stops();
+  bool has_stop = cell_index->section == SECTION_FAVORITES
+                      ? stops->favorites_count > 0
+                      : stops->nearest_count > 0;
+  return has_stop ? STOP_ROW_HEIGHT : STATUS_ROW_HEIGHT;
 }
 
 // Name (+ distance and favorite star on nearest rows) over the served lines
@@ -98,10 +85,7 @@ static void prv_draw_stop(GContext *ctx, const Layer *cell_layer,
   int right = bounds.size.w - MARGIN;
 
   if (starred) {
-    theme_draw_star(ctx, GPoint(x + 8, 16), 8,
-                    highlighted ? GColorWhite
-                                : PBL_IF_COLOR_ELSE(GColorChromeYellow,
-                                                    GColorBlack));
+    theme_draw_star(ctx, GPoint(x + 8, 16), highlighted);
     x += STAR_W;
   }
   graphics_context_set_text_color(ctx, fg);
@@ -157,7 +141,8 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
       prv_draw_status(ctx, cell_layer, icon, text);
     } else {
       const StopRef *stop = &stops->nearest[cell_index->row];
-      prv_draw_stop(ctx, cell_layer, stop, prv_is_favorite(stops, stop->name));
+      prv_draw_stop(ctx, cell_layer, stop,
+                    model_find_favorite(stop->name) != NULL);
     }
   }
 }

@@ -35,6 +35,7 @@ enum {
   ERR_PARSE = 3,
   ERR_NO_PACKET = 4,
   ERR_GPS = 5,
+  ERR_PHONE = 6,  // watch-only: a request couldn't reach the phone at all
 };
 
 typedef struct {
@@ -89,6 +90,9 @@ typedef struct {
 
 DepartureBoard *model_board(void);
 StopsModel *model_stops(void);
+// Favorite with this stop name, or NULL. Matched by name because favorite ids
+// go stale when the backend reassigns them.
+const StopRef *model_find_favorite(const char *name);
 TripModel *model_trip(void);
 
 // Reset the board for a new request (sets loading, clears rows/error)

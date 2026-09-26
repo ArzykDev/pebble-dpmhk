@@ -12,6 +12,15 @@ StopsModel *model_stops(void) {
   return &s_stops;
 }
 
+const StopRef *model_find_favorite(const char *name) {
+  for (int i = 0; i < s_stops.favorites_count; i++) {
+    if (strcmp(s_stops.favorites[i].name, name) == 0) {
+      return &s_stops.favorites[i];
+    }
+  }
+  return NULL;
+}
+
 TripModel *model_trip(void) {
   return &s_trip;
 }

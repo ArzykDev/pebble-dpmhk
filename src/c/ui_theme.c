@@ -30,11 +30,16 @@ GColor theme_line_color(const char *line) {
 }
 
 #if defined(PBL_COLOR)
-// Filled chip vertically centered in rect; returns its width. text_dy lifts
-// the glyphs to sit visually centered (system fonts carry top padding).
+// Filled chip vertically centered in rect; returns its width. The large chip
+// is the departure-row badge, the small one the stop-row line list.
 static int prv_draw_chip(GContext *ctx, GRect rect, const char *line,
-                         GFont font, int chip_h, int pad, int text_dy,
-                         bool highlighted) {
+                         bool small, bool highlighted) {
+  GFont font = fonts_get_system_font(small ? FONT_KEY_GOTHIC_14_BOLD
+                                           : FONT_KEY_GOTHIC_24_BOLD);
+  int chip_h = small ? 16 : 26;
+  int pad = small ? 4 : 6;
+  // System fonts carry top padding; lift the glyphs to sit centered
+  int text_dy = small ? -3 : -4;
   // On the (dark) highlighted row the dark badge would vanish, so invert it:
   // a white chip carrying the line color as the number.
   GColor chip_color = highlighted ? GColorWhite : theme_line_color(line);
@@ -48,7 +53,7 @@ static int prv_draw_chip(GContext *ctx, GRect rect, const char *line,
   GRect chip = GRect(rect.origin.x, rect.origin.y + (rect.size.h - chip_h) / 2,
                      chip_w, chip_h);
   graphics_context_set_fill_color(ctx, chip_color);
-  graphics_fill_rect(ctx, chip, chip_h > 20 ? 4 : 3, GCornersAll);
+  graphics_fill_rect(ctx, chip, small ? 3 : 4, GCornersAll);
   graphics_context_set_text_color(ctx, text_color);
   graphics_draw_text(ctx, line, font,
                      GRect(chip.origin.x, chip.origin.y + text_dy, chip.size.w,
@@ -60,12 +65,12 @@ static int prv_draw_chip(GContext *ctx, GRect rect, const char *line,
 
 void theme_draw_line_badge(GContext *ctx, GRect rect, const char *line,
                            bool highlighted) {
-  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
 #if defined(PBL_COLOR)
-  prv_draw_chip(ctx, rect, line, font, 26, 6, -4, highlighted);
+  prv_draw_chip(ctx, rect, line, false, highlighted);
 #else
   graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
-  graphics_draw_text(ctx, line, font, rect, GTextOverflowModeTrailingEllipsis,
+  graphics_draw_text(ctx, line, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+                     rect, GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentLeft, NULL);
 #endif
 }
@@ -108,7 +113,7 @@ void theme_draw_line_chips(GContext *ctx, GRect rect, const char *lines,
       return;
     }
     x += prv_draw_chip(ctx, GRect(x, rect.origin.y, right - x, rect.size.h),
-                       line, font, rect.size.h, 4, -3, highlighted) +
+                       line, true, highlighted) +
          gap;
     p = end;
   }
@@ -121,20 +126,27 @@ void theme_draw_line_chips(GContext *ctx, GRect rect, const char *lines,
 #endif
 }
 
-void theme_draw_star(GContext *ctx, GPoint c, int r, GColor color) {
-  GPoint pts[10];
-  for (int i = 0; i < 10; i++) {
-    // Fatter than a geometric star: thin arms drop out when filled this small
-    int rad = (i % 2) ? r * 11 / 20 : r;
-    int32_t a = TRIG_MAX_ANGLE * i / 10;
-    pts[i] = GPoint(c.x + rad * sin_lookup(a) / TRIG_MAX_RATIO,
-                    c.y - rad * cos_lookup(a) / TRIG_MAX_RATIO);
+void theme_draw_star(GContext *ctx, GPoint c, bool highlighted) {
+  // Built once and kept for the app's lifetime; only moved per draw
+  static GPoint s_points[10];
+  static GPath *s_star;
+  if (!s_star) {
+    const int r = 8;
+    for (int i = 0; i < 10; i++) {
+      // Fatter than a geometric star: thin arms drop out when filled this small
+      int rad = (i % 2) ? r * 11 / 20 : r;
+      int32_t a = TRIG_MAX_ANGLE * i / 10;
+      s_points[i] = GPoint(rad * sin_lookup(a) / TRIG_MAX_RATIO,
+                           -rad * cos_lookup(a) / TRIG_MAX_RATIO);
+    }
+    static GPathInfo s_info = {.num_points = 10, .points = s_points};
+    s_star = gpath_create(&s_info);
   }
-  GPathInfo info = {.num_points = 10, .points = pts};
-  GPath *path = gpath_create(&info);
-  graphics_context_set_fill_color(ctx, color);
-  gpath_draw_filled(ctx, path);
-  gpath_destroy(path);
+  gpath_move_to(s_star, c);
+  graphics_context_set_fill_color(
+      ctx, highlighted ? GColorWhite
+                       : PBL_IF_COLOR_ELSE(GColorChromeYellow, GColorBlack));
+  gpath_draw_filled(ctx, s_star);
 }
 
 #if !defined(PBL_PLATFORM_APLITE)
@@ -220,8 +232,8 @@ void theme_draw_status(GContext *ctx, GRect rect, uint32_t resource_id,
                      GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
 }
 
-const char *theme_error_status(bool small, uint32_t *icon) {
-  if (!connection_service_peek_pebble_app_connection()) {
+const char *theme_error_status(uint8_t error, bool small, uint32_t *icon) {
+  if (error == ERR_PHONE) {
     *icon = small ? RESOURCE_ID_ICON_SMALL_WARNING
                   : RESOURCE_ID_ICON_STATUS_DISCONNECTED;
     return STR_NO_PHONE;

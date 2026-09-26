@@ -104,6 +104,8 @@ src/c/strings.h        every Czech UI string (UTF-8 literals)
 src/c/ui_theme.c       line colours/chips, star, system-icon empty states
 resources/images/      menu icon + PebbleOS status icons (.pdc; -aplite.png
                        1-bit fallbacks — aplite can't draw PDC)
+resources/icon-src/    source SVGs of those icons; regenerate with PebbleOS
+                       tools/generate_pdcs (pdc_gen.py) + pdc2png
 src/c/windows/         stops_window (Oblíbené+Nejbližší), departures_window,
                        trip_window (downstream stops of a tapped departure)
 src/pkjs/index.js      'ready'/'appmessage' router + Clay wiring
@@ -140,8 +142,9 @@ ROW_META=id, ROW_TIME=distance string, ROW_DEST=served lines (space-joined,
 cut to 31 UTF-8 bytes = `LINES_LEN` - 1). `REQUEST_ID` echoed everywhere; C
 drops mismatches. Omitted META_STOP_NAME keeps the watch's request-time name.
 `ROW_DELAY` −32768 = unknown. META_FLAGS: bit0 cached, bit1 stale. ERROR:
-1 network, 2 API, 3 parse, 4 no packet, 5 GPS. Keep `comm.c`, `appmsg.js`, and
-`model.h` enums in sync when changing any of this.
+1 network, 2 API, 3 parse, 4 no packet, 5 GPS; 6 phone unreachable is
+watch-only (set by comm.c when a send fails with the phone link down). Keep
+`comm.c`, `appmsg.js`, and `model.h` enums in sync when changing any of this.
 
 ## Caching (live + offline fallback)
 

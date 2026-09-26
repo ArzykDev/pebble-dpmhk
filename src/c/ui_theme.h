@@ -16,8 +16,8 @@ GColor theme_line_color(const char *line);
 void theme_draw_line_badge(GContext *ctx, GRect rect, const char *line,
                            bool highlighted);
 
-// Filled five-point star (favorite marker) of outer radius r centered at c.
-void theme_draw_star(GContext *ctx, GPoint c, int r, GColor color);
+// Filled five-point favorite star (16 px) centered at c.
+void theme_draw_star(GContext *ctx, GPoint c, bool highlighted);
 
 // Draw a space-separated line list as small chips left to right, ending in an
 // ellipsis when they don't all fit. Mono platforms draw the plain list.
@@ -34,10 +34,9 @@ GSize theme_draw_icon(GContext *ctx, uint32_t resource_id, GPoint origin,
 void theme_draw_status(GContext *ctx, GRect rect, uint32_t resource_id,
                        const char *text);
 
-// Error text for a failed fetch: a dead phone link reads differently from a
-// phone that is up but can't reach the API. Sets *icon to the matching
-// status (large) or small icon.
-const char *theme_error_status(bool small, uint32_t *icon);
+// Error text for a failed fetch (ERR_*). Sets *icon to the matching status
+// (large) or small icon.
+const char *theme_error_status(uint8_t error, bool small, uint32_t *icon);
 
 // Apply the DPMHK-branded selection highlight to a menu (works on every
 // platform; degrades to black/white on mono).

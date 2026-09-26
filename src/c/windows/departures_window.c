@@ -122,19 +122,7 @@ static const char *prv_status_message(const DepartureBoard *board,
     *icon = 0;
     return buf;
   }
-  return theme_error_status(false, icon);
-}
-
-// Match by name: favorite ids go stale when the backend reassigns them.
-static const StopRef *prv_board_favorite(void) {
-  const DepartureBoard *board = model_board();
-  const StopsModel *stops = model_stops();
-  for (int i = 0; i < stops->favorites_count; i++) {
-    if (strcmp(stops->favorites[i].name, board->stop_name) == 0) {
-      return &stops->favorites[i];
-    }
-  }
-  return NULL;
+  return theme_error_status(board->error, false, icon);
 }
 
 static uint16_t prv_get_num_sections(MenuLayer *menu_layer, void *context) {
@@ -206,9 +194,10 @@ static void prv_draw_action(GContext *ctx, const Layer *cell_layer,
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   GColor fg = highlighted ? GColorWhite : GColorBlack;
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
-  const char *text = row == ACTION_REFRESH ? STR_REFRESH
-                     : prv_board_favorite()  ? STR_FAV_REMOVE
-                                             : STR_FAV_ADD;
+  const char *text =
+      row == ACTION_REFRESH                           ? STR_REFRESH
+      : model_find_favorite(model_board()->stop_name) ? STR_FAV_REMOVE
+                                                      : STR_FAV_ADD;
   int star_w = row == ACTION_FAVORITE ? 20 : 0;
   GRect box = GRect(MARGIN, 0, bounds.size.w - 2 * MARGIN, bounds.size.h);
   GSize ts = graphics_text_layout_get_content_size(
@@ -216,10 +205,7 @@ static void prv_draw_action(GContext *ctx, const Layer *cell_layer,
       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
   int x = box.origin.x + (box.size.w - ts.w - star_w) / 2;
   if (star_w) {
-    theme_draw_star(ctx, GPoint(x + 8, bounds.size.h / 2), 8,
-                    highlighted ? GColorWhite
-                                : PBL_IF_COLOR_ELSE(GColorChromeYellow,
-                                                    GColorBlack));
+    theme_draw_star(ctx, GPoint(x + 8, bounds.size.h / 2), highlighted);
   }
   graphics_context_set_text_color(ctx, fg);
   graphics_draw_text(ctx, text, font,
@@ -317,7 +303,7 @@ static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
       return;
     }
     // The phone answers with a favorites push, which relabels this row
-    const StopRef *fav = prv_board_favorite();
+    const StopRef *fav = model_find_favorite(board->stop_name);
     vibes_short_pulse();
     if (fav) {
       comm_remove_favorite(fav->id);

@@ -105,27 +105,6 @@
         },
         {
           "type": "raw",
-          "name": "ICON_STATUS_NO_LOCATION",
-          "file": "images/status_no_location.pdc",
-          "targetPlatforms": [
-            "basalt",
-            "chalk",
-            "diorite",
-            "emery",
-            "flint",
-            "gabbro"
-          ]
-        },
-        {
-          "type": "bitmap",
-          "name": "ICON_STATUS_NO_LOCATION",
-          "file": "images/status_no_location-aplite.png",
-          "targetPlatforms": [
-            "aplite"
-          ]
-        },
-        {
-          "type": "raw",
           "name": "ICON_STATUS_NO_DEPARTURES",
           "file": "images/status_no_departures.pdc",
           "targetPlatforms": [
