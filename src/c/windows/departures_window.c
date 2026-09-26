@@ -132,7 +132,8 @@ static uint16_t prv_get_num_sections(MenuLayer *menu_layer, void *context) {
 static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                  void *context) {
   if (section_index == SECTION_ACTIONS) {
-    return 2;
+    // Hidden mid-load: refreshing again or toggling a half-loaded stop is moot
+    return model_board()->loading ? 0 : 2;
   }
   const DepartureBoard *board = model_board();
   return board->count > 0 ? board->count : 1;
@@ -146,9 +147,11 @@ static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
   if (model_board()->count > 0) {
     return ROW_HEIGHT;
   }
-  // The empty state fills the screen, leaving the Obnovit row peeking below
+  // The empty state fills the screen, leaving the Obnovit row (when shown)
+  // peeking below
   GRect frame = layer_get_bounds(menu_layer_get_layer(menu_layer));
-  int h = frame.size.h - MENU_CELL_BASIC_HEADER_HEIGHT - ACTION_ROW_HEIGHT;
+  int h = frame.size.h - MENU_CELL_BASIC_HEADER_HEIGHT -
+          (model_board()->loading ? 0 : ACTION_ROW_HEIGHT);
   return h > STATUS_ROW_HEIGHT ? h : STATUS_ROW_HEIGHT;
 }
 
