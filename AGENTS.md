@@ -133,8 +133,9 @@ Response (JS→watch): one header `{REQUEST_ID, OP, META_STOP_NAME?, META_COUNT,
 META_FLAGS, META_FETCHED_AT, ERROR}` then one message per row
 `{REQUEST_ID, OP, ROW_INDEX, ROW_LINE, ROW_DEST, ROW_TIME, ROW_DELAY}`,
 chained on send-success. Stops/favorites rows reuse keys: ROW_LINE=name,
-ROW_META=id, ROW_TIME=distance string. `REQUEST_ID` echoed everywhere; C drops
-mismatches. Omitted META_STOP_NAME keeps the watch's request-time name.
+ROW_META=id, ROW_TIME=distance string, ROW_DEST=served lines (space-joined,
+cut to 31 UTF-8 bytes = `LINES_LEN` - 1). `REQUEST_ID` echoed everywhere; C
+drops mismatches. Omitted META_STOP_NAME keeps the watch's request-time name.
 `ROW_DELAY` −32768 = unknown. META_FLAGS: bit0 cached, bit1 stale. ERROR:
 1 network, 2 API, 3 parse, 4 no packet, 5 GPS. Keep `comm.c`, `appmsg.js`, and
 `model.h` enums in sync when changing any of this.

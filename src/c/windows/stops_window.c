@@ -8,6 +8,10 @@
 
 #define SECTION_FAVORITES 0
 #define SECTION_NEAREST 1
+#define STOP_ROW_HEIGHT 50
+#define STATUS_ROW_HEIGHT 44  // MenuLayer default (not exported by the SDK)
+#define MARGIN PBL_IF_ROUND_ELSE(18, 4)
+#define STAR_W 20
 
 static Window *s_window;
 static MenuLayer *s_menu_layer;
@@ -39,6 +43,67 @@ static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
   return stops->nearest_count > 0 ? stops->nearest_count : 1;
 }
 
+static bool prv_has_stop(const StopsModel *stops, uint16_t section) {
+  return section == SECTION_FAVORITES ? stops->favorites_count > 0
+                                      : stops->nearest_count > 0;
+}
+
+static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
+                                   void *context) {
+  return prv_has_stop(model_stops(), cell_index->section)
+             ? STOP_ROW_HEIGHT
+             : STATUS_ROW_HEIGHT;
+}
+
+// Match by name: favorite ids go stale when the backend reassigns them.
+static bool prv_is_favorite(const StopsModel *stops, const char *name) {
+  for (int i = 0; i < stops->favorites_count; i++) {
+    if (strcmp(stops->favorites[i].name, name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Name (+ distance and favorite star on nearest rows) over the served lines
+static void prv_draw_stop(GContext *ctx, const Layer *cell_layer,
+                          const StopRef *stop, bool starred) {
+  GRect bounds = layer_get_bounds(cell_layer);
+  bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+  GColor fg = highlighted ? GColorWhite : GColorBlack;
+  int x = MARGIN;
+  int right = bounds.size.w - MARGIN;
+
+  if (starred) {
+    theme_draw_star(ctx, GPoint(x + 8, 16), 8,
+                    highlighted ? GColorWhite
+                                : PBL_IF_COLOR_ELSE(GColorChromeYellow,
+                                                    GColorBlack));
+    x += STAR_W;
+  }
+  graphics_context_set_text_color(ctx, fg);
+  if (stop->dist[0]) {
+    GFont dist_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+    GSize ds = graphics_text_layout_get_content_size(
+        stop->dist, dist_font, GRect(0, 0, right - x, 24),
+        GTextOverflowModeFill, GTextAlignmentRight);
+    graphics_draw_text(ctx, stop->dist, dist_font,
+                       GRect(right - ds.w, 6, ds.w, 24), GTextOverflowModeFill,
+                       GTextAlignmentRight, NULL);
+    right -= ds.w + 4;
+  }
+  graphics_draw_text(ctx, stop->name,
+                     fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
+                     GRect(x, -2, right - x, 28),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
+                     NULL);
+  if (stop->lines[0]) {
+    theme_draw_line_chips(ctx,
+                          GRect(MARGIN, 29, bounds.size.w - 2 * MARGIN, 16),
+                          stop->lines, highlighted);
+  }
+}
+
 static int16_t prv_get_header_height(MenuLayer *menu_layer,
                                      uint16_t section_index, void *context) {
   return MENU_CELL_BASIC_HEADER_HEIGHT;
@@ -58,8 +123,8 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
     if (stops->favorites_count == 0) {
       menu_cell_basic_draw(ctx, cell_layer, STR_NO_FAVORITES, NULL, NULL);
     } else {
-      menu_cell_basic_draw(ctx, cell_layer,
-                           stops->favorites[cell_index->row].name, NULL, NULL);
+      prv_draw_stop(ctx, cell_layer, &stops->favorites[cell_index->row],
+                    false);
     }
   } else {
     if (stops->nearest_count == 0) {
@@ -67,8 +132,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
                            NULL);
     } else {
       const StopRef *stop = &stops->nearest[cell_index->row];
-      menu_cell_basic_draw(ctx, cell_layer, stop->name,
-                           stop->dist[0] ? stop->dist : NULL, NULL);
+      prv_draw_stop(ctx, cell_layer, stop, prv_is_favorite(stops, stop->name));
     }
   }
 }
@@ -119,6 +183,7 @@ static void prv_window_load(Window *window) {
   menu_layer_set_callbacks(s_menu_layer, NULL, (MenuLayerCallbacks){
       .get_num_sections = prv_get_num_sections,
       .get_num_rows = prv_get_num_rows,
+      .get_cell_height = prv_get_cell_height,
       .get_header_height = prv_get_header_height,
       .draw_header = prv_draw_header,
       .draw_row = prv_draw_row,

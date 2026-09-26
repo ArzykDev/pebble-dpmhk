@@ -19,6 +19,11 @@ void theme_draw_line_badge(GContext *ctx, GRect rect, const char *line,
 // Filled five-point star (favorite marker) of outer radius r centered at c.
 void theme_draw_star(GContext *ctx, GPoint c, int r, GColor color);
 
+// Draw a space-separated line list as small chips left to right, ending in an
+// ellipsis when they don't all fit. Mono platforms draw the plain list.
+void theme_draw_line_chips(GContext *ctx, GRect rect, const char *lines,
+                           bool highlighted);
+
 // Apply the DPMHK-branded selection highlight to a menu (works on every
 // platform; degrades to black/white on mono).
 void theme_apply_menu(MenuLayer *menu);

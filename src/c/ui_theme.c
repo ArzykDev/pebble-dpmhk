@@ -1,5 +1,7 @@
 #include "ui_theme.h"
 
+#include "model.h"
+
 // Selection highlight: a dark near-neutral so the colored line badges pop
 // against it rather than clashing (a saturated bar would fight the badges).
 #define THEME_ACCENT PBL_IF_COLOR_ELSE(GColorOxfordBlue, GColorBlack)
@@ -26,34 +28,95 @@ GColor theme_line_color(const char *line) {
 #endif
 }
 
-void theme_draw_line_badge(GContext *ctx, GRect rect, const char *line,
-                           bool highlighted) {
-  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
 #if defined(PBL_COLOR)
+// Filled chip vertically centered in rect; returns its width. text_dy lifts
+// the glyphs to sit visually centered (system fonts carry top padding).
+static int prv_draw_chip(GContext *ctx, GRect rect, const char *line,
+                         GFont font, int chip_h, int pad, int text_dy,
+                         bool highlighted) {
   // On the (dark) highlighted row the dark badge would vanish, so invert it:
   // a white chip carrying the line color as the number.
   GColor chip_color = highlighted ? GColorWhite : theme_line_color(line);
   GColor text_color = highlighted ? theme_line_color(line) : GColorWhite;
   GSize ts = graphics_text_layout_get_content_size(
       line, font, rect, GTextOverflowModeFill, GTextAlignmentLeft);
-  int chip_h = 26;
-  int chip_w = ts.w + 12;
+  int chip_w = ts.w + 2 * pad;
   if (chip_w > rect.size.w) {
     chip_w = rect.size.w;
   }
   GRect chip = GRect(rect.origin.x, rect.origin.y + (rect.size.h - chip_h) / 2,
                      chip_w, chip_h);
   graphics_context_set_fill_color(ctx, chip_color);
-  graphics_fill_rect(ctx, chip, 4, GCornersAll);
+  graphics_fill_rect(ctx, chip, chip_h > 20 ? 4 : 3, GCornersAll);
   graphics_context_set_text_color(ctx, text_color);
   graphics_draw_text(ctx, line, font,
-                     GRect(chip.origin.x, chip.origin.y - 4, chip.size.w,
+                     GRect(chip.origin.x, chip.origin.y + text_dy, chip.size.w,
                            chip.size.h),
                      GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+  return chip_w;
+}
+#endif
+
+void theme_draw_line_badge(GContext *ctx, GRect rect, const char *line,
+                           bool highlighted) {
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+#if defined(PBL_COLOR)
+  prv_draw_chip(ctx, rect, line, font, 26, 6, -4, highlighted);
 #else
   graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
   graphics_draw_text(ctx, line, font, rect, GTextOverflowModeTrailingEllipsis,
                      GTextAlignmentLeft, NULL);
+#endif
+}
+
+void theme_draw_line_chips(GContext *ctx, GRect rect, const char *lines,
+                           bool highlighted) {
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD);
+#if defined(PBL_COLOR)
+  const int gap = 3;
+  const int ellipsis_w = 12;
+  int x = rect.origin.x;
+  int right = rect.origin.x + rect.size.w;
+  const char *p = lines;
+  while (*p) {
+    while (*p == ' ') {
+      p++;
+    }
+    const char *end = p;
+    while (*end && *end != ' ') {
+      end++;
+    }
+    if (end == p) {
+      break;
+    }
+    char line[LINE_LEN];
+    int n = end - p < LINE_LEN - 1 ? end - p : LINE_LEN - 1;
+    memcpy(line, p, n);
+    line[n] = '\0';
+    GSize ts = graphics_text_layout_get_content_size(
+        line, font, rect, GTextOverflowModeFill, GTextAlignmentLeft);
+    bool last = *end == '\0';
+    // Keep room for the ellipsis unless this chip is the final one
+    int limit = last ? right : right - ellipsis_w;
+    if (x + ts.w + 8 > limit) {
+      graphics_context_set_text_color(ctx,
+                                      highlighted ? GColorWhite : GColorBlack);
+      graphics_draw_text(ctx, "…", font,
+                         GRect(x, rect.origin.y - 3, ellipsis_w, rect.size.h),
+                         GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+      return;
+    }
+    x += prv_draw_chip(ctx, GRect(x, rect.origin.y, right - x, rect.size.h),
+                       line, font, rect.size.h, 4, -3, highlighted) +
+         gap;
+    p = end;
+  }
+#else
+  graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
+  graphics_draw_text(ctx, lines, font, GRect(rect.origin.x, rect.origin.y - 3,
+                                             rect.size.w, rect.size.h + 3),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
+                     NULL);
 #endif
 }
 

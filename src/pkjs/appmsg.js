@@ -126,7 +126,30 @@ function sendDeparturesError(requestId, error) {
   sendDepartures(requestId, null, [], { error: error });
 }
 
-// stops: [{id, name, dist}] — dist is a preformatted string like "320 m"
+// Must match LINES_LEN - 1 in src/c/model.h
+var LINES_MAX_BYTES = 31;
+
+function utf8Length(s) {
+  return unescape(encodeURIComponent(s)).length;
+}
+
+// Space-joined line numbers, cut at a whole token to fit the watch buffer
+// (busy stops serve ~30 lines; "Š" variants are 2 bytes).
+function linesField(linky) {
+  var out = '';
+  (linky || []).some(function (l) {
+    var next = out ? out + ' ' + String(l).trim() : String(l).trim();
+    if (utf8Length(next) > LINES_MAX_BYTES) {
+      return true;
+    }
+    out = next;
+    return false;
+  });
+  return out;
+}
+
+// stops: [{id, name, dist, linky}] — dist is a preformatted string like
+// "320 m", linky the served lines
 function sendStops(requestId, op, stops, error) {
   var msgs = [
     {
@@ -145,6 +168,7 @@ function sendStops(requestId, op, stops, error) {
       ROW_LINE: s.name,
       ROW_META: String(s.id),
       ROW_TIME: s.dist || '',
+      ROW_DEST: linesField(s.linky),
     });
   });
   // Recover the nearest list on chain failure. Skip favorites pushes

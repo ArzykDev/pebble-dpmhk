@@ -162,11 +162,14 @@ static void prv_handle_stops_row(DictionaryIterator *iter, uint8_t op,
   }
 
   // Stops rows reuse the departure row keys:
-  // ROW_LINE = stop name, ROW_META = stop id, ROW_TIME = distance string
+  // ROW_LINE = stop name, ROW_META = stop id, ROW_TIME = distance string,
+  // ROW_DEST = served lines
   prv_copy_tuple_str(iter, MESSAGE_KEY_ROW_LINE, ref->name, NAME_LEN);
   prv_copy_tuple_str(iter, MESSAGE_KEY_ROW_META, ref->id, ID_LEN);
   ref->dist[0] = '\0';
   prv_copy_tuple_str(iter, MESSAGE_KEY_ROW_TIME, ref->dist, DIST_LEN);
+  ref->lines[0] = '\0';
+  prv_copy_tuple_str(iter, MESSAGE_KEY_ROW_DEST, ref->lines, LINES_LEN);
 
   if (op == OP_FAVORITES) {
     // Persist once the last pushed favorite arrived

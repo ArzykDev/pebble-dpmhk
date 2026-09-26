@@ -14,8 +14,15 @@ var clay = new Clay(config.buildConfig(), customClay, {
   autoHandleEvents: false,
 });
 
-function pushFavoritesToWatch(favorites) {
-  appmsg.sendStops(0, appmsg.OP.FAVORITES, favorites);
+// stations (optional) supplies each favorite's served lines for the row chips
+function pushFavoritesToWatch(favorites, stations) {
+  var linkyById = {};
+  (stations || []).forEach(function (s) {
+    linkyById[String(s.id)] = s.linky;
+  });
+  appmsg.sendStops(0, appmsg.OP.FAVORITES, favorites.map(function (f) {
+    return { id: f.id, name: f.name, linky: linkyById[f.id] };
+  }));
 }
 
 // Map folded stop name -> station for the current packet. Stop ids are
@@ -106,7 +113,7 @@ Pebble.addEventListener('ready', function () {
     // taps always hit the right stop after a weekly packet rollover.
     var refreshed = remapFavorites(cache.getFavorites(), stations);
     cache.setFavorites(refreshed);
-    pushFavoritesToWatch(refreshed);
+    pushFavoritesToWatch(refreshed, stations);
   }, true);
 });
 
@@ -179,7 +186,7 @@ function updateFavorite(add, stopId) {
       favorites = favorites.slice(-config.SLOT_COUNT);
     }
     cache.setFavorites(favorites);
-    pushFavoritesToWatch(favorites);
+    pushFavoritesToWatch(favorites, stations);
   });
 }
 
@@ -240,6 +247,6 @@ Pebble.addEventListener('webviewclosed', function (e) {
     }
     console.log('favorites: ' + JSON.stringify(favorites));
     cache.setFavorites(favorites);
-    pushFavoritesToWatch(favorites);
+    pushFavoritesToWatch(favorites, stations);
   });
 });

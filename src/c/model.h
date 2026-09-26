@@ -16,6 +16,9 @@
 #define NAME_LEN 34
 #define ID_LEN 8
 #define DIST_LEN 8
+// Space-separated served lines, truncated by the phone (LINES_MAX_BYTES in
+// appmsg.js must stay LINES_LEN - 1)
+#define LINES_LEN 32
 
 // Sentinel for "no realtime delay known" (shared contract with pkjs)
 #define DELAY_UNKNOWN -32768
@@ -45,6 +48,7 @@ typedef struct {
   char id[ID_LEN];      // api.dpmhk.cz stop id
   char name[NAME_LEN];  // stop name, UTF-8
   char dist[DIST_LEN];  // preformatted distance ("320 m"), "" for favorites
+  char lines[LINES_LEN];  // "2 5 6 11", "" until the phone sends it
 } StopRef;
 
 typedef struct {
