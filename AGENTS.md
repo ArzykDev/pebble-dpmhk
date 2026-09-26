@@ -27,6 +27,17 @@ so "nearest stops" rank against your IP location, not HK.
 Do NOT use `pebble emu-bt-connection --connected no` to test offline — it cuts
 pebble-tool's own control socket and you must `pebble kill` to recover.
 
+Touch (emery, gabbro — `PBL_TOUCH`): `prv_init` opts in with
+`app_touch_navigation_enable(true)`; the system bridge then drives every
+MenuLayer (first tap focuses a row, a tap on the focused row = SELECT,
+vertical drag scrolls, swipe right = BACK). The bridge has NO long-press, so
+every long-press action also needs a tappable row (departures board ends with
+Obnovit / Přidat-Odebrat oblíbenou). App recognizers never win while the
+bridge is live. Headless touch: launch with `--vnc` (pass it to EVERY pebble
+command, or the emulator relaunches without it) and drive the pointer, which
+QEMU maps to the touch panel 1:1 — hold ≥100 ms or the tap is missed:
+`uvx vncdotool -s 127.0.0.1::5901 move 100 145 mousedown 1 pause 0.15 mouseup 1`.
+
 ## CI & releasing
 
 GitHub Actions (`.github/workflows/pebble.yml`) builds all 7 platforms on every

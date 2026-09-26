@@ -17,3 +17,6 @@
 #define STR_NO_FAVORITES  "Nastavte v telefonu"
 #define STR_NO_LOCATION   "Poloha nedostupná"
 #define STR_OFFLINE_FMT   "Offline (%s)"
+#define STR_REFRESH       "Obnovit"
+#define STR_FAV_ADD       "Přidat oblíbenou"
+#define STR_FAV_REMOVE    "Odebrat oblíbenou"

@@ -16,6 +16,9 @@ GColor theme_line_color(const char *line);
 void theme_draw_line_badge(GContext *ctx, GRect rect, const char *line,
                            bool highlighted);
 
+// Filled five-point star (favorite marker) of outer radius r centered at c.
+void theme_draw_star(GContext *ctx, GPoint c, int r, GColor color);
+
 // Apply the DPMHK-branded selection highlight to a menu (works on every
 // platform; degrades to black/white on mono).
 void theme_apply_menu(MenuLayer *menu);

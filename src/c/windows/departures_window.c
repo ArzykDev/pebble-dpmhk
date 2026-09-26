@@ -10,6 +10,14 @@
 #define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 #define LINE_BOX_W 40
 #define SMALL_TIME_W 44
+#define ACTION_ROW_HEIGHT 36
+
+// Board rows, then tappable actions: touch has no long-press, so refresh and
+// the favorite toggle need rows of their own.
+#define SECTION_BOARD 0
+#define SECTION_ACTIONS 1
+#define ACTION_REFRESH 0
+#define ACTION_FAVORITE 1
 
 // Board reveal: each row slides REVEAL_TRAVEL units, later rows delayed by
 // REVEAL_STAGGER. Progress must run past the last staggered row or it snaps.
@@ -114,20 +122,42 @@ static const char *prv_status_message(const DepartureBoard *board) {
   return STR_CONN_ERROR;
 }
 
+// Match by name: favorite ids go stale when the backend reassigns them.
+static const StopRef *prv_board_favorite(void) {
+  const DepartureBoard *board = model_board();
+  const StopsModel *stops = model_stops();
+  for (int i = 0; i < stops->favorites_count; i++) {
+    if (strcmp(stops->favorites[i].name, board->stop_name) == 0) {
+      return &stops->favorites[i];
+    }
+  }
+  return NULL;
+}
+
+static uint16_t prv_get_num_sections(MenuLayer *menu_layer, void *context) {
+  return 2;
+}
+
 static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                  void *context) {
+  if (section_index == SECTION_ACTIONS) {
+    return 2;
+  }
   const DepartureBoard *board = model_board();
   return board->count > 0 ? board->count : 1;
 }
 
 static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
                                    void *context) {
+  if (cell_index->section == SECTION_ACTIONS) {
+    return ACTION_ROW_HEIGHT;
+  }
   return model_board()->count > 0 ? ROW_HEIGHT : STATUS_ROW_HEIGHT;
 }
 
 static int16_t prv_get_header_height(MenuLayer *menu_layer,
                                      uint16_t section_index, void *context) {
-  return MENU_CELL_BASIC_HEADER_HEIGHT;
+  return section_index == SECTION_BOARD ? MENU_CELL_BASIC_HEADER_HEIGHT : 0;
 }
 
 static void prv_draw_header(GContext *ctx, const Layer *cell_layer,
@@ -161,8 +191,40 @@ static GColor prv_time_color(const Departure *dep, bool highlighted) {
   return highlighted ? GColorWhite : GColorBlack;
 }
 
+static void prv_draw_action(GContext *ctx, const Layer *cell_layer,
+                            uint16_t row) {
+  GRect bounds = layer_get_bounds(cell_layer);
+  bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+  GColor fg = highlighted ? GColorWhite : GColorBlack;
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+  const char *text = row == ACTION_REFRESH ? STR_REFRESH
+                     : prv_board_favorite()  ? STR_FAV_REMOVE
+                                             : STR_FAV_ADD;
+  int star_w = row == ACTION_FAVORITE ? 20 : 0;
+  GRect box = GRect(MARGIN, 0, bounds.size.w - 2 * MARGIN, bounds.size.h);
+  GSize ts = graphics_text_layout_get_content_size(
+      text, font, GRect(0, 0, box.size.w - star_w, box.size.h),
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+  int x = box.origin.x + (box.size.w - ts.w - star_w) / 2;
+  if (star_w) {
+    theme_draw_star(ctx, GPoint(x + 8, bounds.size.h / 2), 8,
+                    highlighted ? GColorWhite
+                                : PBL_IF_COLOR_ELSE(GColorChromeYellow,
+                                                    GColorBlack));
+  }
+  graphics_context_set_text_color(ctx, fg);
+  graphics_draw_text(ctx, text, font,
+                     GRect(x + star_w, (bounds.size.h - 24) / 2, ts.w, 24),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
+                     NULL);
+}
+
 static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
                          MenuIndex *cell_index, void *context) {
+  if (cell_index->section == SECTION_ACTIONS) {
+    prv_draw_action(ctx, cell_layer, cell_index->row);
+    return;
+  }
   const DepartureBoard *board = model_board();
   GRect bounds = layer_get_bounds(cell_layer);
 
@@ -234,10 +296,30 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   }
 }
 
+static void prv_refresh(void) {
+  const DepartureBoard *board = model_board();
+  comm_request_departures(board->stop_id, board->stop_name);
+}
+
 static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
                              void *context) {
-  // Open the route of the tapped departure (downstream stops)
   const DepartureBoard *board = model_board();
+  if (cell_index->section == SECTION_ACTIONS) {
+    if (cell_index->row == ACTION_REFRESH) {
+      prv_refresh();
+      return;
+    }
+    // The phone answers with a favorites push, which relabels this row
+    const StopRef *fav = prv_board_favorite();
+    vibes_short_pulse();
+    if (fav) {
+      comm_remove_favorite(fav->id);
+    } else {
+      comm_add_favorite(board->stop_id);
+    }
+    return;
+  }
+  // Open the route of the tapped departure (downstream stops)
   if (board->count == 0) {
     return;
   }
@@ -247,10 +329,8 @@ static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
 
 static void prv_select_long_click(MenuLayer *menu_layer, MenuIndex *cell_index,
                                   void *context) {
-  // Long-press still refreshes the current stop (the board also auto-refreshes
-  // on window entry, but keep a manual gesture for power users)
-  const DepartureBoard *board = model_board();
-  comm_request_departures(board->stop_id, board->stop_name);
+  // Button shortcut for the Obnovit row
+  prv_refresh();
 }
 
 static void prv_board_updated(void) {
@@ -283,6 +363,7 @@ static void prv_window_load(Window *window) {
       GRect(0, STATUS_BAR_LAYER_HEIGHT, bounds.size.w,
             bounds.size.h - STATUS_BAR_LAYER_HEIGHT));
   menu_layer_set_callbacks(s_menu_layer, NULL, (MenuLayerCallbacks){
+      .get_num_sections = prv_get_num_sections,
       .get_num_rows = prv_get_num_rows,
       .get_cell_height = prv_get_cell_height,
       .get_header_height = prv_get_header_height,

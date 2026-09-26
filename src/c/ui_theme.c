@@ -57,6 +57,22 @@ void theme_draw_line_badge(GContext *ctx, GRect rect, const char *line,
 #endif
 }
 
+void theme_draw_star(GContext *ctx, GPoint c, int r, GColor color) {
+  GPoint pts[10];
+  for (int i = 0; i < 10; i++) {
+    // Fatter than a geometric star: thin arms drop out when filled this small
+    int rad = (i % 2) ? r * 11 / 20 : r;
+    int32_t a = TRIG_MAX_ANGLE * i / 10;
+    pts[i] = GPoint(c.x + rad * sin_lookup(a) / TRIG_MAX_RATIO,
+                    c.y - rad * cos_lookup(a) / TRIG_MAX_RATIO);
+  }
+  GPathInfo info = {.num_points = 10, .points = pts};
+  GPath *path = gpath_create(&info);
+  graphics_context_set_fill_color(ctx, color);
+  gpath_draw_filled(ctx, path);
+  gpath_destroy(path);
+}
+
 void theme_apply_menu(MenuLayer *menu) {
   menu_layer_set_highlight_colors(menu, THEME_ACCENT, GColorWhite);
 }

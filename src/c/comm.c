@@ -130,6 +130,7 @@ static void prv_handle_stops_header(DictionaryIterator *iter, uint8_t op) {
     if (expected == 0) {
       persist_store_favorites();
     }
+    prv_notify_board();  // the board's favorite action row reflects this list
   }
   prv_notify_stops();
 }
@@ -173,6 +174,7 @@ static void prv_handle_stops_row(DictionaryIterator *iter, uint8_t op,
     if (count && stops->favorites_count >= count->value->uint8) {
       persist_store_favorites();
     }
+    prv_notify_board();
   }
   prv_notify_stops();
 }
