@@ -32,7 +32,7 @@ Touch (emery, gabbro — `PBL_TOUCH`): `prv_init` opts in with
 MenuLayer (first tap focuses a row, a tap on the focused row = SELECT,
 vertical drag scrolls, swipe right = BACK). The bridge has NO long-press, so
 every long-press action also needs a tappable row (departures board ends with
-Obnovit / Přidat-Odebrat oblíbenou). App recognizers never win while the
+Obnovit / ★ Přidat-Odebrat). App recognizers never win while the
 bridge is live. Headless touch: launch with `--vnc` (pass it to EVERY pebble
 command, or the emulator relaunches without it) and drive the pointer, which
 QEMU maps to the touch panel 1:1 — hold ≥100 ms or the tap is missed:
