@@ -7,17 +7,16 @@ renders Czech diacritics natively — do NOT add custom fonts for this).
 
 ## Build / run / debug
 
-The Pebble emulator has broken deps on the Fedora host — run **all** pebble
-commands inside the `ubuntu` distrobox (shares $HOME; the
-`LD_PRELOAD libnxegl.so` warning there is harmless):
+Built against SDK 4.33.1 (pebble-tool 5.x); the SDK and emulator run natively
+on the Fedora host:
 
 ```sh
-distrobox enter ubuntu -- pebble build
-distrobox enter ubuntu -- pebble install --emulator basalt   # any of the 7 platforms
-distrobox enter ubuntu -- pebble logs                        # APP_LOG + JS console.log
-distrobox enter ubuntu -- pebble screenshot
-distrobox enter ubuntu -- pebble emu-button click down       # drive UI headlessly
-distrobox enter ubuntu -- pebble kill                        # stop emulators
+pebble build
+pebble install --emulator basalt   # any of the 7 platforms
+pebble logs                        # APP_LOG + JS console.log
+pebble screenshot
+pebble emu-button click down       # drive UI headlessly
+pebble kill                        # stop emulators
 ```
 
 After editing `messageKeys` in package.json run `pebble clean` once — the
@@ -32,8 +31,7 @@ pebble-tool's own control socket and you must `pebble kill` to recover.
 
 GitHub Actions (`.github/workflows/pebble.yml`) builds all 7 platforms on every
 PR and push to `main` — a compile gate only (no test suite). `make build` wraps
-`pebble build`; on the Fedora host pass the box:
-`make build PEBBLE="distrobox enter ubuntu -- pebble"`.
+`pebble build` (override the binary with `PEBBLE=...`).
 
 Versioning is SemVer `MAJOR.MINOR.PATCH`, kept in `package.json` `version` and
 surfaced as the `.pbw` `versionLabel` (all three parts are preserved).
