@@ -9,12 +9,17 @@ or the stops nearest to you.
 
 ## Features
 
-- **Odjezdy** — live departure board per stop, fed by the (undocumented)
-  official `api.dpmhk.cz` backend that powers dpmhk.cz's own search
+- **Opens on your stop** — launch goes straight to the board of the nearest
+  favorite within 300 m, else the nearest stop (favorite #1 without GPS)
+- **Odjezdy** — departures grouped by line and direction with the next times
+  (`4 · 19 · 34 min`), refreshed when they go stale; fed by the
+  (undocumented) official `api.dpmhk.cz` backend behind dpmhk.cz's search
+- **Připomenutí** — from a line's route screen, get a vibration and its board
+  2/5/10 min (configurable) before the bus leaves
 - **Oblíbené** — favorite stops, configured on the phone (settings page
-  with stop-name typeahead) or directly on the watch (long-press a nearby
-  stop to add, long-press a favorite to remove)
+  with stop-name typeahead)
 - **Nejbližší** — nearest stops via phone GPS
+- **Touch** — Pebble Time 2 and Round 2 scroll and select by touch
 - **Offline** — last results are cached on the phone and watch; the board
   shows `Offline (uloženo HH:MM)` when live data is unreachable
 - Czech UI, all 7 Pebble platforms (aplite → gabbro), round-display aware

@@ -38,8 +38,9 @@ Touch (emery, gabbro — `PBL_TOUCH`): `prv_init` opts in with
 `app_touch_navigation_enable(true)`; the system bridge then drives every
 MenuLayer (first tap focuses a row, a tap on the focused row = SELECT,
 vertical drag scrolls, swipe right = BACK). The bridge has NO long-press, so
-every long-press action also needs a tappable row (departures board ends with
-Obnovit / ★ Přidat-Odebrat). App recognizers never win while the
+every long-press action also needs a tappable row (the board's "Aktualizováno
+HH:MM" footer refreshes; the route screen's alarm row sets a reminder). App
+recognizers never win while the
 bridge is live. Headless touch: launch with `--vnc` (pass it to EVERY pebble
 command, or the emulator relaunches without it) and drive the pointer, which
 QEMU maps to the touch panel 1:1 — hold ≥100 ms or the tap is missed:
@@ -107,6 +108,7 @@ src/c/pebble-dpmhk.c   main()
 src/c/comm.c           ALL app_message_* usage; request/response protocol
 src/c/model.c|h        Departure/StopRef/DepartureBoard structs + static stores
 src/c/persist.c        watch storage: favorites mirror + last board (≤256 B/key)
+src/c/reminder.c       departure reminder (wakeup + persist keys 3/4)
 src/c/strings.h        every Czech UI string (UTF-8 literals)
 src/c/ui_theme.c       line colours/chips, star, system-icon empty states
 resources/images/      menu icon + PebbleOS status icons (.pdc; -aplite.png
@@ -133,16 +135,22 @@ src/pkjs/date.js       DD_MM_YYYY datum, packet pick by range
 Request (watch→JS): `{OP, REQUEST_ID, STOP_ID?, META_STOP_NAME?}`
 (GET_DEPARTURES sends META_STOP_NAME so the phone re-resolves the
 packet-scoped stop id by name — see Caching). OPs: 1=GET_DEPARTURES,
-2=GET_NEAREST, 3=GET_TRIP, 4=FAVORITES (JS→watch push, REQUEST_ID=0),
-5=ADD_FAVORITE, 6=REMOVE_FAVORITE (watch long-press; JS answers with an OP=4
-push). GET_TRIP reuses request row keys: ROW_LINE=line, ROW_DEST=destination
+2=GET_NEAREST, 3=GET_TRIP, 4=FAVORITES (JS→watch push, REQUEST_ID=0; its
+header also carries REMIND_LEAD, the reminder lead in minutes). 5/6 (watch
+add/remove favorite) are retired: favorites live only in the Clay settings.
+A GET_DEPARTURES with NO STOP_ID is the launch request: the phone picks the
+stop (nearest favorite within 300 m, else the nearest stop, else favorite #1
+without a location; `pickHomeStop` in index.js) and names it in the response
+header (STOP_ID + META_STOP_NAME). Any board requested before PebbleKit JS
+has spoken (launch, reminder wakeup) is held in comm.c until the first
+message from the phone — JS pushes cached favorites on 'ready' for exactly
+this — with a 10 s fallback to the persisted board.
+GET_TRIP reuses request row keys: ROW_LINE=line, ROW_DEST=destination
 text, META_STOP_NAME=current stop; the phone resolves the /trasa direction by
 name and streams downstream stop names back (rows: ROW_LINE=stop name).
-OPs 5/6 are fire-and-forget: sent with REQUEST_ID=0 and they must NOT bump
-the request counter — bumping it strands in-flight tracked replies (their
-rows fail the stale-id check and loading flags never clear).
-Response (JS→watch): one header `{REQUEST_ID, OP, META_STOP_NAME?, META_COUNT,
-META_FLAGS, META_FETCHED_AT, ERROR}` then one message per row
+Response (JS→watch): one header `{REQUEST_ID, OP, STOP_ID?, META_STOP_NAME?,
+META_COUNT, META_FLAGS, META_FETCHED_AT, ERROR}` (the watch ignores
+META_FETCHED_AT and stamps boards with its own clock) then one message per row
 `{REQUEST_ID, OP, ROW_INDEX, ROW_LINE, ROW_DEST, ROW_TIME, ROW_DELAY}`,
 chained on send-success. Stops/favorites rows reuse keys: ROW_LINE=name,
 ROW_META=id, ROW_TIME=distance string, ROW_DEST=served lines (space-joined,
@@ -168,8 +176,16 @@ name can't be matched it errors to the offline board rather than fetching the
 stale watch-sent id (which now points at a different stop). On a fetch failure
 `getStations` serves the prior list so resolution still works offline.
 
+The board groups rows by line+destination on the watch (protocol rows stay
+per departure) and refreshes only when stale — its earliest departure left
+or it is 5 min old — since the API has no realtime data. Those refreshes are
+silent (`board->silent`): the old board stays until the new one is complete,
+and a failed one keeps it.
+
 Offline fallback lives entirely on the watch (persist): key 1 = favorites
-mirror (instant first paint), key 2 = last board (4 rows, fresh boards only).
+mirror (instant first paint), key 2 = last board (4 rows, fresh boards only;
+the launch request takes whichever board is stored), key 3 = pending
+reminder, key 4 = reminder lead.
 The persisted board is shown with the Offline badge whenever live data can't be
 delivered — both when the phone is unreachable (`prv_departures_send_failed`,
 send failure) AND when the phone reports a fetch error (network/API/parse/
