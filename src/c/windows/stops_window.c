@@ -10,7 +10,6 @@
 #define SECTION_NEAREST 1
 #define STOP_ROW_HEIGHT 50
 #define STATUS_ROW_HEIGHT 44  // MenuLayer default (not exported by the SDK)
-#define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 #define STAR_W 20
 
 static Window *s_window;
@@ -39,7 +38,8 @@ static void prv_draw_status(GContext *ctx, const Layer *cell_layer,
   GRect bounds = layer_get_bounds(cell_layer);
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   const int icon_size = 25;
-  int x = MARGIN + 2;
+  int margin = theme_row_inset(cell_layer, (bounds.size.h - 24) / 2, 24);
+  int x = margin + 2;
   if (icon) {
     theme_draw_icon(ctx, icon,
                     GPoint(x, (bounds.size.h - icon_size) / 2), highlighted);
@@ -48,7 +48,7 @@ static void prv_draw_status(GContext *ctx, const Layer *cell_layer,
   graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
   graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(x, (bounds.size.h - 24) / 2,
-                           bounds.size.w - x - MARGIN, 24),
+                           bounds.size.w - x - margin, 24),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
 }
@@ -81,8 +81,9 @@ static void prv_draw_stop(GContext *ctx, const Layer *cell_layer,
   GRect bounds = layer_get_bounds(cell_layer);
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   GColor fg = highlighted ? GColorWhite : GColorBlack;
-  int x = MARGIN;
-  int right = bounds.size.w - MARGIN;
+  int margin = theme_row_inset(cell_layer, 2, 24);
+  int x = margin;
+  int right = bounds.size.w - margin;
 
   if (starred) {
     theme_draw_star(ctx, GPoint(x + 8, 16), highlighted);
@@ -106,7 +107,10 @@ static void prv_draw_stop(GContext *ctx, const Layer *cell_layer,
                      NULL);
   if (stop->lines[0]) {
     theme_draw_line_chips(ctx,
-                          GRect(MARGIN, 29, bounds.size.w - 2 * MARGIN, 16),
+                          GRect(theme_row_inset(cell_layer, 29, 16), 29,
+                                bounds.size.w -
+                                    2 * theme_row_inset(cell_layer, 29, 16),
+                                16),
                           stop->lines, highlighted);
   }
 }
@@ -118,7 +122,7 @@ static int16_t prv_get_header_height(MenuLayer *menu_layer,
 
 static void prv_draw_header(GContext *ctx, const Layer *cell_layer,
                             uint16_t section_index, void *context) {
-  menu_cell_basic_header_draw(
+  theme_draw_header(
       ctx, cell_layer,
       section_index == SECTION_FAVORITES ? STR_FAVORITES : STR_NEAREST);
 }

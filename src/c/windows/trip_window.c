@@ -8,10 +8,10 @@
 
 #define ROW_HEIGHT 32
 #define REMIND_ROW_HEIGHT 36
+#define SPINE_X PBL_IF_ROUND_ELSE(23, 9)
 // The reminder row heads the screen, then the route
 #define SECTION_REMIND 0
 #define SECTION_ROUTE 1
-#define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 
 static Window *s_window;
 static MenuLayer *s_menu_layer;
@@ -69,7 +69,7 @@ static void prv_draw_header(GContext *ctx, const Layer *cell_layer,
   const TripModel *trip = model_trip();
   snprintf(s_header_text, sizeof(s_header_text), "%s " STR_TRIP_ARROW " %s",
            trip->line, trip->dest);
-  menu_cell_basic_header_draw(ctx, cell_layer, s_header_text);
+  theme_draw_header(ctx, cell_layer, s_header_text);
 }
 
 // "⏰ Připomenout 18:42", or its cancel when one is set for this line
@@ -87,14 +87,15 @@ static void prv_draw_remind(GContext *ctx, const Layer *cell_layer) {
     snprintf(text, sizeof(text), STR_REMIND_FMT, s_time);
   }
   const int icon_size = 25;
-  int x = MARGIN + 2;
+  int margin = theme_row_inset(cell_layer, (bounds.size.h - 24) / 2, 24);
+  int x = margin + 2;
   theme_draw_icon(ctx, RESOURCE_ID_ICON_SMALL_ALARM,
                   GPoint(x, (bounds.size.h - icon_size) / 2), highlighted);
   x += icon_size + 6;
   graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
   graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(x, (bounds.size.h - 24) / 2,
-                           bounds.size.w - x - MARGIN, 24),
+                           bounds.size.w - x - margin, 24),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
 }
@@ -117,7 +118,10 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
 
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   int mid_y = bounds.size.h / 2;
-  int spine_x = MARGIN + 5;
+  // The spine stays straight (a fixed x), only the name's right edge follows
+  // the round display
+  int margin = theme_row_inset(cell_layer, 2, 26);
+  int spine_x = SPINE_X;
   GColor accent =
       highlighted ? GColorWhite
                   : PBL_IF_COLOR_ELSE(theme_line_color(trip->line), GColorBlack);
@@ -142,7 +146,7 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
   graphics_draw_text(ctx, trip->stops[cell_index->row],
                      fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(name_x, 2, bounds.size.w - name_x - MARGIN, 28),
+                     GRect(name_x, 2, bounds.size.w - name_x - margin, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
 }

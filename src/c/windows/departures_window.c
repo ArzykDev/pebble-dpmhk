@@ -239,7 +239,7 @@ static void prv_draw_header(GContext *ctx, const Layer *cell_layer,
                             uint16_t section_index, void *context) {
   // Launch opens a stop the phone picks, so always say which one it is
   const DepartureBoard *board = model_board();
-  menu_cell_basic_header_draw(
+  theme_draw_header(
       ctx, cell_layer, board->stop_name[0] ? board->stop_name : STR_LOCATING);
 }
 
@@ -320,25 +320,27 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   GColor fg = highlighted ? GColorWhite : GColorBlack;
   int ox = prv_reveal_offset(cell_index->row, bounds.size.w);
-  int w = bounds.size.w - 2 * MARGIN;
 
   // Top: line badge, then the destination beside it
-  theme_draw_line_badge(ctx, GRect(MARGIN + ox, 3, LINE_BOX_W, 26), first->line,
+  int m1 = theme_row_inset(cell_layer, 3, 26);
+  theme_draw_line_badge(ctx, GRect(m1 + ox, 3, LINE_BOX_W, 26), first->line,
                         highlighted);
-  int dest_x = MARGIN + LINE_BOX_W + 4;
+  int dest_x = m1 + LINE_BOX_W + 4;
   graphics_context_set_text_color(ctx, fg);
   graphics_draw_text(ctx, first->dest,
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(dest_x + ox, 4, bounds.size.w - dest_x - MARGIN, 22),
+                     GRect(dest_x + ox, 4, bounds.size.w - dest_x - m1, 22),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
 
   // Bottom: the next departures, right-aligned and leading the eye
+  int m2 = theme_row_inset(cell_layer, 26, 24);
+  int w = bounds.size.w - 2 * m2;
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   char times[48];
   prv_format_times(g, font, w, times, sizeof(times));
   graphics_context_set_text_color(ctx, prv_time_color(first, highlighted));
-  graphics_draw_text(ctx, times, font, GRect(MARGIN + ox, 22, w, 28),
+  graphics_draw_text(ctx, times, font, GRect(m2 + ox, 22, w, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
                      NULL);
 }
