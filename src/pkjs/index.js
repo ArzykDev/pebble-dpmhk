@@ -5,6 +5,7 @@ var config = require('./config');
 var customClay = require('./custom-clay');
 var departures = require('./departures');
 var geo = require('./geo');
+var reminder = require('./reminder');
 var trip = require('./trip');
 var util = require('./util');
 
@@ -231,6 +232,9 @@ Pebble.addEventListener('appmessage', function (e) {
       }
       appmsg.sendTrip(p.REQUEST_ID, names);
     });
+  } else if (p.OP === appmsg.OP.REMINDER) {
+    reminder.place(String(p.ROW_LINE || ''), String(p.ROW_DEST || ''),
+                   String(p.ROW_TIME || ''), String(p.META_STOP_NAME || ''));
   }
 });
 

@@ -7,6 +7,7 @@ var OP = {
   GET_TRIP: 3,
   FAVORITES: 4,
   // 5/6 (watch-side favorite add/remove) are retired: favorites live in Clay
+  REMINDER: 7, // watch → phone: (re)place or, with no time, drop the pin
 };
 
 var ERR = {

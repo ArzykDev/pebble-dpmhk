@@ -14,8 +14,8 @@ or the stops nearest to you.
 - **Odjezdy** — departures grouped by line and direction with the next times
   (`4 · 19 · 34 min`), refreshed when they go stale; fed by the
   (undocumented) official `api.dpmhk.cz` backend behind dpmhk.cz's search
-- **Připomenutí** — from a line's route screen, get a vibration and its board
-  2/5/10 min (configurable) before the bus leaves
+- **Připomenutí** — from a line's route screen, add the departure to the
+  Pebble timeline with a reminder 2/5/10 min (configurable) before it leaves
 - **Oblíbené** — favorite stops, configured on the phone (settings page
   with stop-name typeahead)
 - **Nejbližší** — nearest stops via phone GPS

@@ -108,7 +108,8 @@ src/c/pebble-dpmhk.c   main()
 src/c/comm.c           ALL app_message_* usage; request/response protocol
 src/c/model.c|h        Departure/StopRef/DepartureBoard structs + static stores
 src/c/persist.c        watch storage: favorites mirror + last board (≤256 B/key)
-src/c/reminder.c       departure reminder (wakeup + persist keys 3/4)
+src/c/reminder.c       departure reminder toggle state (persist keys 3/4)
+src/pkjs/reminder.js   reminder as a local timeline pin (insertTimelinePin)
 src/c/strings.h        every Czech UI string (UTF-8 literals)
 src/c/ui_theme.c       line colours/chips, star, system-icon empty states
 resources/images/      menu icon + PebbleOS status icons (.pdc; -aplite.png
@@ -138,11 +139,17 @@ packet-scoped stop id by name — see Caching). OPs: 1=GET_DEPARTURES,
 2=GET_NEAREST, 3=GET_TRIP, 4=FAVORITES (JS→watch push, REQUEST_ID=0; its
 header also carries REMIND_LEAD, the reminder lead in minutes). 5/6 (watch
 add/remove favorite) are retired: favorites live only in the Clay settings.
+7=REMINDER (watch→JS, fire-and-forget, REQUEST_ID=0, no counter bump):
+ROW_LINE/ROW_DEST/ROW_TIME/META_STOP_NAME; the phone replaces its one
+reminder pin (`Pebble.insertTimelinePin`, local pins — the new Pebble app has
+no timeline web API; local pins ignore `actions`), empty ROW_TIME = remove.
+The emulator's pypkjs 2.0.7 lacks insertTimelinePin: test pin layouts with
+`pebble insert-pin`.
 A GET_DEPARTURES with NO STOP_ID is the launch request: the phone picks the
 stop (nearest favorite within 300 m, else the nearest stop, else favorite #1
 without a location; `pickHomeStop` in index.js) and names it in the response
 header (STOP_ID + META_STOP_NAME). Any board requested before PebbleKit JS
-has spoken (launch, reminder wakeup) is held in comm.c until the first
+has spoken (e.g. the launch) is held in comm.c until the first
 message from the phone — JS pushes cached favorites on 'ready' for exactly
 this — with a 10 s fallback to the persisted board.
 GET_TRIP reuses request row keys: ROW_LINE=line, ROW_DEST=destination
@@ -184,8 +191,9 @@ and a failed one keeps it.
 
 Offline fallback lives entirely on the watch (persist): key 1 = favorites
 mirror (instant first paint), key 2 = last board (4 rows, fresh boards only;
-the launch request takes whichever board is stored), key 3 = pending
-reminder, key 4 = reminder lead.
+the launch request takes whichever board is stored), key 3 = the
+reminder the route screen's toggle shows (the pin itself lives on the phone),
+key 4 = reminder lead.
 The persisted board is shown with the Offline badge whenever live data can't be
 delivered — both when the phone is unreachable (`prv_departures_send_failed`,
 send failure) AND when the phone reports a fetch error (network/API/parse/

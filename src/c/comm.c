@@ -362,6 +362,21 @@ static bool prv_send_request(uint8_t op, const char *stop_id) {
   return prv_send_request_with_id(op, stop_id, NULL, s_request_counter);
 }
 
+bool comm_send_reminder(const char *line, const char *dest, const char *hhmm,
+                        const char *stop_name) {
+  DictionaryIterator *iter;
+  if (app_message_outbox_begin(&iter) != APP_MSG_OK) {
+    return false;
+  }
+  dict_write_uint8(iter, MESSAGE_KEY_OP, OP_REMINDER);
+  dict_write_uint32(iter, MESSAGE_KEY_REQUEST_ID, 0);
+  dict_write_cstring(iter, MESSAGE_KEY_ROW_LINE, line);
+  dict_write_cstring(iter, MESSAGE_KEY_ROW_DEST, dest);
+  dict_write_cstring(iter, MESSAGE_KEY_ROW_TIME, hhmm);
+  dict_write_cstring(iter, MESSAGE_KEY_META_STOP_NAME, stop_name);
+  return app_message_outbox_send() == APP_MSG_OK;
+}
+
 void comm_refresh_departures(void) {
   DepartureBoard *board = model_board();
   s_request_counter++;
