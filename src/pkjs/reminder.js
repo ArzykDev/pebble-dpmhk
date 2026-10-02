@@ -47,7 +47,8 @@ function place(line, dest, hhmm, stopName) {
     layout: {
       type: 'genericPin',
       title: title,
-      body: 'Odjezd ze zastávky ' + stopName + ' v ' + hhmm,
+      // The pin header already shows the time
+      body: 'Zastávka ' + stopName,
       tinyIcon: 'system://images/SCHEDULED_EVENT',
     },
     reminders: [
