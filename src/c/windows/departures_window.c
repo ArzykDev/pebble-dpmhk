@@ -283,9 +283,17 @@ static void prv_draw_footer(GContext *ctx, const Layer *cell_layer) {
   }
   const int glyph_w = 18;
   int margin = theme_row_inset(cell_layer, (bounds.size.h - 24) / 2, 24);
+  int avail = bounds.size.w - 2 * margin - glyph_w;
   GSize ts = graphics_text_layout_get_content_size(
-      text, font, GRect(0, 0, bounds.size.w - 2 * margin - glyph_w, 24),
-      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+      text, font, GRect(0, 0, 1000, 24), GTextOverflowModeFill,
+      GTextAlignmentLeft);
+  if (ts.w > avail) {
+    // 144 px screens: the bold text would lose the time to the ellipsis
+    font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+    ts = graphics_text_layout_get_content_size(
+        text, font, GRect(0, 0, avail, 24), GTextOverflowModeTrailingEllipsis,
+        GTextAlignmentLeft);
+  }
   int x = (bounds.size.w - ts.w - glyph_w) / 2;
   graphics_context_set_text_color(ctx, fg);
   graphics_draw_text(ctx, text, font,
