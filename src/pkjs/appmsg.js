@@ -93,7 +93,6 @@ function sendDepartures(requestId, stopName, items, opts) {
     OP: OP.GET_DEPARTURES,
     META_COUNT: items.length,
     META_FLAGS: opts.flags || 0,
-    META_FETCHED_AT: opts.fetchedAt || '',
     ERROR: opts.error || ERR.NONE,
   };
   if (stopName) {
@@ -154,17 +153,17 @@ function linesField(linky) {
 
 // stops: [{id, name, dist, linky}] — dist is a preformatted string like
 // "320 m", linky the served lines
-// extra: additional header fields (the favorites push carries REMIND_LEAD)
-function sendStops(requestId, op, stops, error, extra) {
+// remindLead (favorites push only): reminder lead in minutes for the watch
+function sendStops(requestId, op, stops, error, remindLead) {
   var header = {
     REQUEST_ID: requestId,
     OP: op,
     META_COUNT: stops.length,
     ERROR: error || ERR.NONE,
   };
-  Object.keys(extra || {}).forEach(function (k) {
-    header[k] = extra[k];
-  });
+  if (remindLead) {
+    header.REMIND_LEAD = remindLead;
+  }
   var msgs = [header];
   stops.forEach(function (s, i) {
     msgs.push({

@@ -37,7 +37,6 @@
       "STOP_ID",
       "META_STOP_NAME",
       "META_FLAGS",
-      "META_FETCHED_AT",
       "META_COUNT",
       "ERROR",
       "ROW_INDEX",

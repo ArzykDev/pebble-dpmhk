@@ -128,5 +128,4 @@ module.exports = {
   setFavorites: setFavorites,
   getRemindLead: getRemindLead,
   setRemindLead: setRemindLead,
-  DEFAULT_REMIND_LEAD: DEFAULT_REMIND_LEAD,
 };

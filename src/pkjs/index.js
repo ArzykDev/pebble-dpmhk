@@ -23,7 +23,7 @@ function pushFavoritesToWatch(favorites, stations) {
   });
   appmsg.sendStops(0, appmsg.OP.FAVORITES, favorites.map(function (f) {
     return { id: f.id, name: f.name, linky: linkyById[f.id] };
-  }), null, { REMIND_LEAD: cache.getRemindLead() });
+  }), null, cache.getRemindLead());
 }
 
 // Map folded stop name -> station for the current packet. Stop ids are
@@ -127,37 +127,21 @@ function pickHomeStop(cb) {
         }
         return;
       }
-      var best = null;
-      var bestM = Infinity;
-      favorites.forEach(function (s) {
-        var m = geo.distanceTo(lat, lon, s);
-        if (m <= HOME_FAVORITE_RADIUS_M && m < bestM) {
-          best = s;
-          bestM = m;
-        }
-      });
-      if (!best) {
-        stations.forEach(function (s) {
-          var m = geo.distanceTo(lat, lon, s);
-          if (m < bestM) {
-            best = s;
-            bestM = m;
-          }
-        });
-      }
-      cb(best ? null : { type: 'api' }, best);
+      var fav = geo.closest(favorites, lat, lon);
+      var best = fav && fav.m <= HOME_FAVORITE_RADIUS_M
+          ? fav : geo.closest(stations, lat, lon);
+      cb(best ? null : { type: 'api' }, best && best.station);
     });
   });
 }
 
 function sendBoard(requestId, liveId, stopName) {
-  departures.fetch(liveId, function (err, items, fetchedAt) {
+  departures.fetch(liveId, function (err, items) {
     if (err) {
       appmsg.sendDeparturesError(requestId, err);
       return;
     }
     appmsg.sendDepartures(requestId, stopName, items, {
-      fetchedAt: fetchedAt,
       stopId: stopName ? liveId : null,
     });
   });

@@ -148,16 +148,17 @@ The emulator's pypkjs 2.0.7 lacks insertTimelinePin: test pin layouts with
 A GET_DEPARTURES with NO STOP_ID is the launch request: the phone picks the
 stop (nearest favorite within 300 m, else the nearest stop, else favorite #1
 without a location; `pickHomeStop` in index.js) and names it in the response
-header (STOP_ID + META_STOP_NAME). Any board requested before PebbleKit JS
-has spoken (e.g. the launch) is held in comm.c until the first
-message from the phone — JS pushes cached favorites on 'ready' for exactly
-this — with a 10 s fallback to the persisted board.
+header (STOP_ID + META_STOP_NAME). Any tracked request (departures, trip,
+nearest) made before PebbleKit JS has spoken — the launch board in practice —
+is held in comm.c (`prv_dispatch`, latest wins) until the first message from
+the phone (JS pushes cached favorites on 'ready' for exactly this), failing
+after 10 s; a held board falls back to the persisted one.
 GET_TRIP reuses request row keys: ROW_LINE=line, ROW_DEST=destination
 text, META_STOP_NAME=current stop; the phone resolves the /trasa direction by
 name and streams downstream stop names back (rows: ROW_LINE=stop name).
 Response (JS→watch): one header `{REQUEST_ID, OP, STOP_ID?, META_STOP_NAME?,
-META_COUNT, META_FLAGS, META_FETCHED_AT, ERROR}` (the watch ignores
-META_FETCHED_AT and stamps boards with its own clock) then one message per row
+META_COUNT, META_FLAGS, ERROR}` (the watch stamps a board's fetch time with
+its own clock) then one message per row
 `{REQUEST_ID, OP, ROW_INDEX, ROW_LINE, ROW_DEST, ROW_TIME, ROW_DELAY}`,
 chained on send-success. Stops/favorites rows reuse keys: ROW_LINE=name,
 ROW_META=id, ROW_TIME=distance string, ROW_DEST=served lines (space-joined,

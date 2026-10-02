@@ -3,6 +3,7 @@
 // before. Local pins ignore `actions`, so the card can't open the app.
 
 var cache = require('./cache');
+var dates = require('./date');
 
 // "HH:MM" on the phone clock, rolled to tomorrow past the 23:00 merge window
 // (same rule as the watch's theme_minutes_until)
@@ -11,10 +12,8 @@ function departureDate(hhmm) {
   var now = new Date();
   var d = new Date(now.getTime());
   d.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
-  if (d.getTime() - now.getTime() <= -2 * 60 * 60 * 1000) {
-    d.setDate(d.getDate() + 1);
-  }
-  return d;
+  return d.getTime() - now.getTime() <= -2 * 60 * 60 * 1000
+      ? dates.nextDay(d) : d;
 }
 
 function remove() {

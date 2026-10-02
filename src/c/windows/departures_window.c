@@ -7,7 +7,6 @@
 
 #define ROW_HEIGHT 52
 #define STATUS_ROW_HEIGHT 32
-#define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 #define LINE_BOX_W 40
 #define GROUP_TIMES 3  // next departures shown per line+destination row
 // The API has no realtime data, so re-fetch only when the board went stale:
@@ -40,6 +39,7 @@ static uint8_t s_prev_count;
 // departed times drop out.
 typedef struct {
   uint8_t items[GROUP_TIMES];
+  int32_t mins[GROUP_TIMES];  // minutes until each, parsed once per regroup
   uint8_t n;
 } Group;
 static Group s_groups[MAX_DEPARTURES];
@@ -157,7 +157,8 @@ static void prv_regroup(void) {
       g->n = 0;
     }
     if (g->n < GROUP_TIMES) {
-      g->items[g->n++] = i;
+      g->items[g->n] = i;
+      g->mins[g->n++] = mins;
     }
   }
 }
@@ -170,7 +171,7 @@ static void prv_format_times(const Group *g, GFont font, int width, char *out,
   out[0] = '\0';
   for (uint8_t k = 0; k < g->n; k++) {
     const char *time = board->items[g->items[k]].time;
-    int mins = theme_minutes_until(time);
+    int mins = g->mins[k];
     bool is_min = mins != THEME_MIN_INVALID && mins < 60;
     char token[16];
     if (!is_min) {
@@ -183,7 +184,7 @@ static void prv_format_times(const Group *g, GFont font, int width, char *out,
     // "min" closes a run of minutes: before a clock time or at the very end
     bool next_is_min = false;
     if (k + 1 < g->n) {
-      int next = theme_minutes_until(board->items[g->items[k + 1]].time);
+      int next = g->mins[k + 1];
       next_is_min = next != THEME_MIN_INVALID && next < 60 && next > 0;
     }
     bool add_unit = is_min && mins > 0 && !next_is_min;
@@ -281,8 +282,9 @@ static void prv_draw_footer(GContext *ctx, const Layer *cell_layer) {
              board->fetched_at);
   }
   const int glyph_w = 18;
+  int margin = theme_row_inset(cell_layer, (bounds.size.h - 24) / 2, 24);
   GSize ts = graphics_text_layout_get_content_size(
-      text, font, GRect(0, 0, bounds.size.w - 2 * MARGIN - glyph_w, 24),
+      text, font, GRect(0, 0, bounds.size.w - 2 * margin - glyph_w, 24),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
   int x = (bounds.size.w - ts.w - glyph_w) / 2;
   graphics_context_set_text_color(ctx, fg);
@@ -295,14 +297,9 @@ static void prv_draw_footer(GContext *ctx, const Layer *cell_layer) {
   graphics_context_set_stroke_width(ctx, 2);
   graphics_draw_arc(ctx, GRect(c.x - 6, c.y - 6, 13, 13), GOvalScaleModeFitCircle,
                     DEG_TO_TRIGANGLE(60), DEG_TO_TRIGANGLE(360));
-  // Arrowhead at the arc's open end (top)
-  graphics_context_set_fill_color(ctx, fg);
-  GPathInfo head = {.num_points = 3,
-                    .points = (GPoint[]){{c.x + 1, c.y - 9}, {c.x + 6, c.y - 6},
-                                         {c.x + 1, c.y - 2}}};
-  GPath *p = gpath_create(&head);
-  gpath_draw_filled(ctx, p);
-  gpath_destroy(p);
+  // Arrowhead at the arc's open end (top): two strokes, no path allocation
+  graphics_draw_line(ctx, GPoint(c.x + 1, c.y - 8), GPoint(c.x + 5, c.y - 6));
+  graphics_draw_line(ctx, GPoint(c.x + 5, c.y - 6), GPoint(c.x + 1, c.y - 3));
 }
 
 static void prv_draw_row(GContext *ctx, const Layer *cell_layer,

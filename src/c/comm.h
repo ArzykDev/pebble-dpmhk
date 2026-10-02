@@ -35,7 +35,6 @@ bool comm_send_reminder(const char *line, const char *dest, const char *hhmm,
                         const char *stop_name);
 void comm_request_nearest(void);
 // Fetch the downstream stops of a departure (line + destination text) from the
-// given current stop; the phone resolves the /trasa direction by name.
-void comm_request_trip(const char *line, const char *dest,
-                       const char *stop_name);
+// board's stop; the phone resolves the /trasa direction by name.
+void comm_request_trip(const char *line, const char *dest);
 

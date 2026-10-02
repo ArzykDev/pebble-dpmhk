@@ -2,7 +2,6 @@
 
 // Czech UI strings (UTF-8). Keep all user-visible text here.
 #define STR_APP_TITLE     "MHD HK"
-#define STR_STOPS_TITLE   "Zastávky"
 #define STR_FAVORITES     "Oblíbené"
 #define STR_NEAREST       "Nejbližší"
 #define STR_FIND_NEAREST  "Najít polohou..."

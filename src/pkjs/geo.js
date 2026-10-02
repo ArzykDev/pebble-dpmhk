@@ -42,6 +42,18 @@ function distanceTo(lat, lon, station) {
   return haversine(lat, lon, station.lat, station.lng);
 }
 
+// The station of `list` nearest to (lat, lon) as {station, m}, null if empty
+function closest(list, lat, lon) {
+  var best = null;
+  list.forEach(function (s) {
+    var m = distanceTo(lat, lon, s);
+    if (!best || m < best.m) {
+      best = { station: s, m: m };
+    }
+  });
+  return best;
+}
+
 // cb(errCode, stops[{id, name, dist, linky}])
 function findNearest(maxCount, cb) {
   locate(function (gErr, lat, lon) {
@@ -77,6 +89,6 @@ function findNearest(maxCount, cb) {
 
 module.exports = {
   locate: locate,
-  distanceTo: distanceTo,
+  closest: closest,
   findNearest: findNearest,
 };

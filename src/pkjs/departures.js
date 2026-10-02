@@ -8,7 +8,7 @@ var MAX_ROWS = 18; // keep in sync with MAX_DEPARTURES in model.h
 var LATE_HOUR = 23;
 var LATE_MIN_ROWS = 3;
 
-// cb(errCode, items, fetchedAt)
+// cb(errCode, items)
 function fetch(stopId, cb) {
   api.getPackets(function (err, packets) {
     if (err) {
@@ -23,7 +23,7 @@ function fetch(stopId, cb) {
     }
 
     function done(items) {
-      cb(appmsg.ERR.NONE, items.slice(0, MAX_ROWS), dates.hhmm(now));
+      cb(appmsg.ERR.NONE, items.slice(0, MAX_ROWS));
     }
 
     api.getDepartures(packet, stopId, dates.toDatum(now),

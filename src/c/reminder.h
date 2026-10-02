@@ -17,6 +17,9 @@ bool reminder_set(const char *line, const char *dest, const char *hhmm);
 
 void reminder_cancel(void);
 
+// True when the "HH:MM" departure is already inside the lead time
+bool reminder_too_soon(const char *hhmm);
+
 // Lead time in minutes (phone setting)
 uint8_t reminder_lead(void);
 void reminder_set_lead(uint8_t minutes);

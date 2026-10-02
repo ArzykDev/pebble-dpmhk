@@ -18,6 +18,18 @@ static MenuLayer *s_menu_layer;
 static StatusBarLayer *s_status_bar;
 static char s_header_text[LINE_LEN + DEST_LEN + 8];
 static char s_time[TIME_LEN];  // next departure of this line, for reminders
+// Reminder row state, refreshed on push/select/update rather than per draw
+// (it reads watch storage)
+typedef enum { REMIND_HIDDEN, REMIND_OFFER, REMIND_SOON, REMIND_SET } RemindRow;
+static RemindRow s_remind;
+
+static void prv_update_remind(const char *line, const char *dest) {
+  int mins = theme_minutes_until(s_time);
+  s_remind = mins == THEME_MIN_INVALID || mins < 0 ? REMIND_HIDDEN
+             : reminder_is_set(line, dest)          ? REMIND_SET
+             : reminder_too_soon(s_time)            ? REMIND_SOON
+                                                    : REMIND_OFFER;
+}
 
 static const char *prv_status_message(const TripModel *trip, uint32_t *icon) {
   if (trip->error != ERR_NONE) {
@@ -38,8 +50,7 @@ static uint16_t prv_get_num_sections(MenuLayer *menu_layer, void *context) {
 static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                  void *context) {
   if (section_index == SECTION_REMIND) {
-    int mins = theme_minutes_until(s_time);
-    return mins != THEME_MIN_INVALID && mins >= 0 ? 1 : 0;
+    return s_remind == REMIND_HIDDEN ? 0 : 1;
   }
   const TripModel *trip = model_trip();
   return trip->count > 0 ? trip->count : 1;
@@ -74,14 +85,12 @@ static void prv_draw_header(GContext *ctx, const Layer *cell_layer,
 
 // "⏰ Připomenout 18:42", or its cancel when one is set for this line
 static void prv_draw_remind(GContext *ctx, const Layer *cell_layer) {
-  const TripModel *trip = model_trip();
   GRect bounds = layer_get_bounds(cell_layer);
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   char text[32];
-  int mins = theme_minutes_until(s_time);
-  if (reminder_is_set(trip->line, trip->dest)) {
+  if (s_remind == REMIND_SET) {
     snprintf(text, sizeof(text), "%s", STR_REMIND_CANCEL);
-  } else if (mins - reminder_lead() < 1) {
+  } else if (s_remind == REMIND_SOON) {
     snprintf(text, sizeof(text), STR_REMIND_SOON_FMT, s_time);
   } else {
     snprintf(text, sizeof(text), STR_REMIND_FMT, s_time);
@@ -157,11 +166,12 @@ static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
     return;
   }
   const TripModel *trip = model_trip();
-  if (reminder_is_set(trip->line, trip->dest)) {
+  if (s_remind == REMIND_SET) {
     reminder_cancel();
   } else if (reminder_set(trip->line, trip->dest, s_time)) {
     vibes_short_pulse();  // confirm: it's set
   }
+  prv_update_remind(trip->line, trip->dest);
   menu_layer_reload_data(menu_layer);
 }
 
@@ -214,6 +224,8 @@ static void prv_window_unload(Window *window) {
 void trip_window_push(const char *line, const char *dest, const char *time) {
   strncpy(s_time, time, TIME_LEN - 1);
   s_time[TIME_LEN - 1] = '\0';
+  // Before the push, so the menu is built with the row (and selects it)
+  prv_update_remind(line, dest);
   if (!s_window) {
     s_window = window_create();
     window_set_window_handlers(s_window, (WindowHandlers){
@@ -222,5 +234,5 @@ void trip_window_push(const char *line, const char *dest, const char *time) {
     });
   }
   window_stack_push(s_window, true);
-  comm_request_trip(line, dest, model_board()->stop_name);
+  comm_request_trip(line, dest);
 }

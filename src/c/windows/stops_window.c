@@ -23,9 +23,6 @@ static const char *prv_nearest_status(const StopsModel *stops,
     *icon = 0;
     return STR_LOADING;
   }
-  if (stops->nearest_error == ERR_GPS) {
-    return STR_NO_LOCATION;
-  }
   if (stops->nearest_error != ERR_NONE) {
     return theme_error_status(stops->nearest_error, true, icon);
   }
@@ -106,12 +103,10 @@ static void prv_draw_stop(GContext *ctx, const Layer *cell_layer,
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
   if (stop->lines[0]) {
-    theme_draw_line_chips(ctx,
-                          GRect(theme_row_inset(cell_layer, 29, 16), 29,
-                                bounds.size.w -
-                                    2 * theme_row_inset(cell_layer, 29, 16),
-                                16),
-                          stop->lines, highlighted);
+    int chips_margin = theme_row_inset(cell_layer, 29, 16);
+    theme_draw_line_chips(
+        ctx, GRect(chips_margin, 29, bounds.size.w - 2 * chips_margin, 16),
+        stop->lines, highlighted);
   }
 }
 

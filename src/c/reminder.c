@@ -36,10 +36,14 @@ uint8_t reminder_lead(void) {
              : DEFAULT_LEAD_MIN;
 }
 
-bool reminder_set(const char *line, const char *dest, const char *hhmm) {
+bool reminder_too_soon(const char *hhmm) {
   int mins = theme_minutes_until(hhmm);
-  if (mins == THEME_MIN_INVALID || mins - reminder_lead() < 1) {
-    return false;  // already inside the lead time
+  return mins == THEME_MIN_INVALID || mins - reminder_lead() < 1;
+}
+
+bool reminder_set(const char *line, const char *dest, const char *hhmm) {
+  if (reminder_too_soon(hhmm)) {
+    return false;
   }
   if (!comm_send_reminder(line, dest, hhmm, model_board()->stop_name)) {
     return false;
