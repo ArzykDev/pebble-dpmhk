@@ -19,6 +19,7 @@
 #define STR_OFFLINE_FMT   "Offline (%s)"
 #define STR_UPDATED_FMT   "Aktualizováno %s"
 #define STR_LOCATING      "Hledám zastávku…"
+#define STR_RETRY         "Zkusit znovu"
 #define STR_REMIND_FMT    "Připomenout %s"
 #define STR_REMIND_SOON_FMT "Odjíždí v %s"
 #define STR_REMIND_CANCEL "Zrušit připomenutí"

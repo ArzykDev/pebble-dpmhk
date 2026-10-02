@@ -121,7 +121,7 @@ static void prv_maybe_start_load_anim(const DepartureBoard *board) {
 
 static const char *prv_status_message(const DepartureBoard *board,
                                       uint32_t *icon) {
-  if (board->error == ERR_NONE || board->error == ERR_GPS) {
+  if (board->error == ERR_NONE) {
     if (!board->loading) {
       *icon = RESOURCE_ID_ICON_STATUS_NO_DEPARTURES;
       return STR_NO_DEPARTURES;
@@ -239,8 +239,10 @@ static void prv_draw_header(GContext *ctx, const Layer *cell_layer,
                             uint16_t section_index, void *context) {
   // Launch opens a stop the phone picks, so always say which one it is
   const DepartureBoard *board = model_board();
-  theme_draw_header(
-      ctx, cell_layer, board->stop_name[0] ? board->stop_name : STR_LOCATING);
+  theme_draw_header(ctx, cell_layer,
+                    board->stop_name[0] ? board->stop_name
+                    : board->loading    ? STR_LOCATING
+                                        : STR_APP_TITLE);
 }
 
 // Tint the departure time by realtime delay on color platforms
@@ -270,10 +272,14 @@ static void prv_draw_footer(GContext *ctx, const Layer *cell_layer) {
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
   const DepartureBoard *board = model_board();
   char text[32];
-  snprintf(text, sizeof(text),
-           (board->flags & BOARD_FLAG_CACHED) ? STR_OFFLINE_FMT
-                                              : STR_UPDATED_FMT,
-           board->fetched_at);
+  if (!board->fetched_at[0]) {
+    snprintf(text, sizeof(text), "%s", STR_RETRY);  // nothing loaded yet
+  } else {
+    snprintf(text, sizeof(text),
+             (board->flags & BOARD_FLAG_CACHED) ? STR_OFFLINE_FMT
+                                                : STR_UPDATED_FMT,
+             board->fetched_at);
+  }
   const int glyph_w = 18;
   GSize ts = graphics_text_layout_get_content_size(
       text, font, GRect(0, 0, bounds.size.w - 2 * MARGIN - glyph_w, 24),

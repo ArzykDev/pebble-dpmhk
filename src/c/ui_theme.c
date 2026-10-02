@@ -233,6 +233,11 @@ void theme_draw_status(GContext *ctx, GRect rect, uint32_t resource_id,
 }
 
 const char *theme_error_status(uint8_t error, bool small, uint32_t *icon) {
+  if (error == ERR_GPS) {
+    *icon = small ? RESOURCE_ID_ICON_SMALL_LOCATION
+                  : RESOURCE_ID_ICON_STATUS_NO_LOCATION;
+    return STR_NO_LOCATION;
+  }
   if (error == ERR_PHONE) {
     *icon = small ? RESOURCE_ID_ICON_SMALL_WARNING
                   : RESOURCE_ID_ICON_STATUS_DISCONNECTED;
