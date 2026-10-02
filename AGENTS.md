@@ -27,6 +27,13 @@ so "nearest stops" rank against your IP location, not HK.
 Do NOT use `pebble emu-bt-connection --connected no` to test offline — it cuts
 pebble-tool's own control socket and you must `pebble kill` to recover.
 
+Agents/background work: run the emulator HEADLESS so no window opens on the
+desktop — `--vnc` replaces QEMU's SDL window, and stripping the display vars
+makes it impossible to open one even if a command forgets `--vnc`:
+`env -u DISPLAY -u WAYLAND_DISPLAY pebble install --emulator emery --vnc`
+(same prefix + `--vnc` for screenshot/emu-button/logs). If a stray QEMU holds
+VNC :1, `pkill -x qemu-pebble` (never `pkill -f`, it matches your own shell).
+
 Touch (emery, gabbro — `PBL_TOUCH`): `prv_init` opts in with
 `app_touch_navigation_enable(true)`; the system bridge then drives every
 MenuLayer (first tap focuses a row, a tap on the focused row = SELECT,
