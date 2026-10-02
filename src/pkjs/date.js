@@ -15,10 +15,6 @@ function toISO(d) {
          pad2(d.getDate());
 }
 
-function hhmm(d) {
-  return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
-}
-
 // Pick the packet whose [from, to] range covers the date; null if none
 function pickPacket(packets, d) {
   if (!packets || !packets.length) {
@@ -41,7 +37,6 @@ function nextDay(d) {
 module.exports = {
   toDatum: toDatum,
   toISO: toISO,
-  hhmm: hhmm,
   pickPacket: pickPacket,
   nextDay: nextDay,
 };

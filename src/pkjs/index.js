@@ -5,6 +5,7 @@ var config = require('./config');
 var customClay = require('./custom-clay');
 var departures = require('./departures');
 var geo = require('./geo');
+var reminder = require('./reminder');
 var trip = require('./trip');
 var util = require('./util');
 
@@ -22,7 +23,7 @@ function pushFavoritesToWatch(favorites, stations) {
   });
   appmsg.sendStops(0, appmsg.OP.FAVORITES, favorites.map(function (f) {
     return { id: f.id, name: f.name, linky: linkyById[f.id] };
-  }));
+  }), null, cache.getRemindLead());
 }
 
 // Map folded stop name -> station for the current packet. Stop ids are
@@ -99,8 +100,58 @@ function resolveStopId(sentId, stopName, cb) {
   });
 }
 
+// A favorite this close counts as "where I am" and wins over a nearer stop
+var HOME_FAVORITE_RADIUS_M = 300;
+
+// The stop to open on launch: the nearest favorite within the radius, else the
+// nearest station; without a location, favorite #1. cb(err, station) where err
+// is an api.js error object or { code: ERR.* }.
+function pickHomeStop(cb) {
+  cache.getStations(function (err, stations) {
+    if (err) {
+      cb(err);
+      return;
+    }
+    var byName = indexByFoldedName(stations);
+    var favorites = cache.getFavorites()
+      .map(function (f) {
+        return resolveStation(stations, f.name, byName);
+      })
+      .filter(Boolean);
+    geo.locate(function (gErr, lat, lon) {
+      if (gErr) {
+        if (favorites.length) {
+          cb(null, favorites[0]);
+        } else {
+          cb({ code: gErr });
+        }
+        return;
+      }
+      var fav = geo.closest(favorites, lat, lon);
+      var best = fav && fav.m <= HOME_FAVORITE_RADIUS_M
+          ? fav : geo.closest(stations, lat, lon);
+      cb(best ? null : { type: 'api' }, best && best.station);
+    });
+  });
+}
+
+function sendBoard(requestId, liveId, stopName) {
+  departures.fetch(liveId, function (err, items) {
+    if (err) {
+      appmsg.sendDeparturesError(requestId, err);
+      return;
+    }
+    appmsg.sendDepartures(requestId, stopName, items, {
+      stopId: stopName ? liveId : null,
+    });
+  });
+}
+
 Pebble.addEventListener('ready', function () {
   console.log('PKJS ready');
+  // The watch holds its launch request until it hears from us: answer at once
+  // with the cached favorites (chips arrive with the refreshed push below).
+  pushFavoritesToWatch(cache.getFavorites(), null);
   // Force a fresh station list on app open: ids drift mid-packet, so this heals
   // the favorites mirror with current ids every time the app is launched.
   cache.getStations(function (err, stations) {
@@ -123,7 +174,17 @@ Pebble.addEventListener('appmessage', function (e) {
               (p.STOP_ID ? ' stop=' + p.STOP_ID : '') +
               (p.META_STOP_NAME ? ' name=' + p.META_STOP_NAME : ''));
 
-  if (p.OP === appmsg.OP.GET_DEPARTURES) {
+  if (p.OP === appmsg.OP.GET_DEPARTURES && !p.STOP_ID) {
+    // Launch: the phone picks the stop and tells the watch which one
+    pickHomeStop(function (hErr, station) {
+      if (hErr) {
+        appmsg.sendDeparturesError(
+          p.REQUEST_ID, hErr.code || appmsg.errCode(hErr));
+        return;
+      }
+      sendBoard(p.REQUEST_ID, String(station.id), station.name);
+    });
+  } else if (p.OP === appmsg.OP.GET_DEPARTURES) {
     var sentId = String(p.STOP_ID);
     var stopName = p.META_STOP_NAME ? String(p.META_STOP_NAME) : null;
     // Always fetch fresh — no local replay. A departure board is a snapshot of
@@ -137,15 +198,7 @@ Pebble.addEventListener('appmessage', function (e) {
         appmsg.sendDeparturesError(p.REQUEST_ID, appmsg.errCode(rErr));
         return;
       }
-      departures.fetch(liveId, function (err, items, fetchedAt) {
-        if (err) {
-          appmsg.sendDeparturesError(p.REQUEST_ID, err);
-          return;
-        }
-        appmsg.sendDepartures(p.REQUEST_ID, null, items, {
-          fetchedAt: fetchedAt,
-        });
-      });
+      sendBoard(p.REQUEST_ID, liveId, null);
     });
   } else if (p.OP === appmsg.OP.GET_NEAREST) {
     geo.findNearest(5, function (err, stops) {
@@ -163,32 +216,11 @@ Pebble.addEventListener('appmessage', function (e) {
       }
       appmsg.sendTrip(p.REQUEST_ID, names);
     });
-  } else if (p.OP === appmsg.OP.ADD_FAVORITE ||
-             p.OP === appmsg.OP.REMOVE_FAVORITE) {
-    updateFavorite(p.OP === appmsg.OP.ADD_FAVORITE, String(p.STOP_ID));
+  } else if (p.OP === appmsg.OP.REMINDER) {
+    reminder.place(String(p.ROW_LINE || ''), String(p.ROW_DEST || ''),
+                   String(p.ROW_TIME || ''), String(p.META_STOP_NAME || ''));
   }
 });
-
-// Watch long-press: add/remove a favorite, then push the new list back
-function updateFavorite(add, stopId) {
-  cache.getStations(function (err, stations) {
-    var favorites = cache.getFavorites().filter(function (f) {
-      return f.id !== stopId;
-    });
-    if (add && !err) {
-      for (var i = 0; i < stations.length; i++) {
-        if (String(stations[i].id) === stopId) {
-          favorites.push({ id: stopId, name: stations[i].name });
-          break;
-        }
-      }
-      // Keep the just-added stop (last); evict the oldest when over the cap
-      favorites = favorites.slice(-config.SLOT_COUNT);
-    }
-    cache.setFavorites(favorites);
-    pushFavoritesToWatch(favorites, stations);
-  });
-}
 
 Pebble.addEventListener('showConfiguration', function () {
   cache.getStations(function (err, stations) {
@@ -220,6 +252,12 @@ Pebble.addEventListener('webviewclosed', function (e) {
   } catch (err) {
     console.log('config parse failed: ' + err);
     return;
+  }
+
+  var lead = settings.REMIND_LEAD;
+  lead = parseInt(lead && lead.value !== undefined ? lead.value : lead, 10);
+  if (lead > 0) {
+    cache.setRemindLead(lead);
   }
 
   cache.getStations(function (err2, stations) {

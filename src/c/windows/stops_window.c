@@ -10,7 +10,6 @@
 #define SECTION_NEAREST 1
 #define STOP_ROW_HEIGHT 50
 #define STATUS_ROW_HEIGHT 44  // MenuLayer default (not exported by the SDK)
-#define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 #define STAR_W 20
 
 static Window *s_window;
@@ -24,9 +23,6 @@ static const char *prv_nearest_status(const StopsModel *stops,
     *icon = 0;
     return STR_LOADING;
   }
-  if (stops->nearest_error == ERR_GPS) {
-    return STR_NO_LOCATION;
-  }
   if (stops->nearest_error != ERR_NONE) {
     return theme_error_status(stops->nearest_error, true, icon);
   }
@@ -39,7 +35,8 @@ static void prv_draw_status(GContext *ctx, const Layer *cell_layer,
   GRect bounds = layer_get_bounds(cell_layer);
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   const int icon_size = 25;
-  int x = MARGIN + 2;
+  int margin = theme_row_inset(cell_layer, (bounds.size.h - 24) / 2, 24);
+  int x = margin + 2;
   if (icon) {
     theme_draw_icon(ctx, icon,
                     GPoint(x, (bounds.size.h - icon_size) / 2), highlighted);
@@ -48,7 +45,7 @@ static void prv_draw_status(GContext *ctx, const Layer *cell_layer,
   graphics_context_set_text_color(ctx, highlighted ? GColorWhite : GColorBlack);
   graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      GRect(x, (bounds.size.h - 24) / 2,
-                           bounds.size.w - x - MARGIN, 24),
+                           bounds.size.w - x - margin, 24),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
 }
@@ -81,8 +78,9 @@ static void prv_draw_stop(GContext *ctx, const Layer *cell_layer,
   GRect bounds = layer_get_bounds(cell_layer);
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   GColor fg = highlighted ? GColorWhite : GColorBlack;
-  int x = MARGIN;
-  int right = bounds.size.w - MARGIN;
+  int margin = theme_row_inset(cell_layer, 2, 24);
+  int x = margin;
+  int right = bounds.size.w - margin;
 
   if (starred) {
     theme_draw_star(ctx, GPoint(x + 8, 16), highlighted);
@@ -105,9 +103,10 @@ static void prv_draw_stop(GContext *ctx, const Layer *cell_layer,
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
   if (stop->lines[0]) {
-    theme_draw_line_chips(ctx,
-                          GRect(MARGIN, 29, bounds.size.w - 2 * MARGIN, 16),
-                          stop->lines, highlighted);
+    int chips_margin = theme_row_inset(cell_layer, 29, 16);
+    theme_draw_line_chips(
+        ctx, GRect(chips_margin, 29, bounds.size.w - 2 * chips_margin, 16),
+        stop->lines, highlighted);
   }
 }
 
@@ -118,7 +117,7 @@ static int16_t prv_get_header_height(MenuLayer *menu_layer,
 
 static void prv_draw_header(GContext *ctx, const Layer *cell_layer,
                             uint16_t section_index, void *context) {
-  menu_cell_basic_header_draw(
+  theme_draw_header(
       ctx, cell_layer,
       section_index == SECTION_FAVORITES ? STR_FAVORITES : STR_NEAREST);
 }
@@ -163,20 +162,6 @@ static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
   }
 }
 
-static void prv_select_long_click(MenuLayer *menu_layer, MenuIndex *cell_index,
-                                  void *context) {
-  StopsModel *stops = model_stops();
-  if (cell_index->section == SECTION_FAVORITES) {
-    if (stops->favorites_count > 0) {
-      vibes_short_pulse();
-      comm_remove_favorite(stops->favorites[cell_index->row].id);
-    }
-  } else if (stops->nearest_count > 0) {
-    vibes_short_pulse();
-    comm_add_favorite(stops->nearest[cell_index->row].id);
-  }
-}
-
 static void prv_stops_updated(void) {
   if (s_menu_layer) {
     menu_layer_reload_data(s_menu_layer);
@@ -198,7 +183,6 @@ static void prv_window_load(Window *window) {
       .draw_header = prv_draw_header,
       .draw_row = prv_draw_row,
       .select_click = prv_select_click,
-      .select_long_click = prv_select_long_click,
   });
 #if defined(PBL_ROUND)
   menu_layer_set_center_focused(s_menu_layer, true);

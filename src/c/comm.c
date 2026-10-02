@@ -2,6 +2,7 @@
 
 #include "model.h"
 #include "persist.h"
+#include "reminder.h"
 
 #if defined(PBL_PLATFORM_APLITE)
 #define INBOX_SIZE 512
@@ -14,6 +15,16 @@ static CommUpdatedHandler s_board_handler;
 static CommUpdatedHandler s_stops_handler;
 static CommUpdatedHandler s_trip_handler;
 static uint32_t s_request_counter;
+// PebbleKit JS may not be running yet when the app launches; messages sent
+// before its 'ready' are lost. A request made before the first message from
+// the phone (index.js pushes cached favorites on 'ready') is held, latest
+// wins: only the latest request's reply passes the stale-id check anyway.
+#define PHONE_READY_TIMEOUT_MS 10000
+static bool s_phone_ready;
+static uint8_t s_pending_op;  // 0 = none
+static AppTimer *s_ready_timer;
+static void prv_flush_pending(void);
+static void prv_ready_timeout(void *data);
 
 static void prv_notify_board(void) {
   if (s_board_handler) {
@@ -66,20 +77,36 @@ static void prv_handle_departures_header(DictionaryIterator *iter,
   // the Bluetooth-down path (which falls back with ERR_NETWORK instead).
   uint8_t err = error ? error->value->uint8 : ERR_NONE;
   if (err != ERR_NONE) {
+    if (board->silent) {
+      board->silent = false;  // keep the board on screen; it's still fresher
+      return;
+    }
     prv_departures_offline_fallback(err);
     return;
   }
 
   board->count = 0;
   board->expected = count ? count->value->uint8 : 0;
+  if (board->expected > MAX_DEPARTURES) {
+    board->expected = MAX_DEPARTURES;  // rows past the cap are dropped
+  }
   board->error = ERR_NONE;
   board->flags = flags ? flags->value->uint8 : 0;
+  // A launch request names no stop: the phone reports the one it chose
+  prv_copy_tuple_str(iter, MESSAGE_KEY_STOP_ID, board->stop_id, ID_LEN);
   prv_copy_tuple_str(iter, MESSAGE_KEY_META_STOP_NAME, board->stop_name,
                      NAME_LEN);
-  prv_copy_tuple_str(iter, MESSAGE_KEY_META_FETCHED_AT, board->fetched_at,
-                     TIME_LEN);
+  // Stamp the fetch in the watch's own clock: it is what the countdowns and
+  // the footer are read against (the phone's clock/timezone can differ)
+  time_t now = time(NULL);
+  strftime(board->fetched_at, TIME_LEN, "%H:%M", localtime(&now));
   board->loading = (board->error == ERR_NONE && board->expected > 0);
-  prv_notify_board();
+  if (!board->loading) {
+    board->silent = false;
+  }
+  if (!board->silent) {
+    prv_notify_board();
+  }
 }
 
 static void prv_handle_departures_row(DictionaryIterator *iter,
@@ -99,11 +126,15 @@ static void prv_handle_departures_row(DictionaryIterator *iter,
   }
   if (board->count >= board->expected) {
     board->loading = false;
+    board->silent = false;  // complete: the swap is one repaint below
     if (!(board->flags & BOARD_FLAG_CACHED)) {
       persist_store_board();  // fresh board — keep for offline fallback
     }
   }
   // Repaint on first row, completion, and every 4th row to limit flicker
+  if (board->silent) {
+    return;
+  }
   if (board->count == 1 || !board->loading || board->count % 4 == 0) {
     prv_notify_board();
   }
@@ -123,13 +154,16 @@ static void prv_handle_stops_header(DictionaryIterator *iter, uint8_t op) {
     stops->nearest_error = err;
     stops->nearest_loading = (err == ERR_NONE && expected > 0);
   } else {  // OP_FAVORITES
+    Tuple *lead = dict_find(iter, MESSAGE_KEY_REMIND_LEAD);
+    if (lead) {
+      reminder_set_lead(lead->value->uint8);
+    }
     stops->favorites_count = 0;
     if (expected > MAX_FAVORITES) {
       expected = MAX_FAVORITES;
     }
     if (expected == 0) {
       persist_store_favorites();
-      prv_notify_board();  // the board's favorite action row reflects this list
     }
   }
   prv_notify_stops();
@@ -176,7 +210,6 @@ static void prv_handle_stops_row(DictionaryIterator *iter, uint8_t op,
     Tuple *count = dict_find(iter, MESSAGE_KEY_META_COUNT);
     if (count && stops->favorites_count >= count->value->uint8) {
       persist_store_favorites();
-      prv_notify_board();
     }
   }
   prv_notify_stops();
@@ -225,6 +258,11 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   uint8_t op = op_tuple->value->uint8;
   uint32_t request_id = req_tuple ? req_tuple->value->uint32 : 0;
 
+  if (!s_phone_ready) {
+    s_phone_ready = true;
+    prv_flush_pending();
+  }
+
   // Drop stale responses; unsolicited favorites pushes (request_id 0) pass
   if (op != OP_FAVORITES && request_id != s_request_counter) {
     APP_LOG(APP_LOG_LEVEL_DEBUG, "drop stale msg op=%d req=%lu cur=%lu",
@@ -270,102 +308,153 @@ static uint8_t prv_send_error(void) {
                                                          : ERR_PHONE;
 }
 
-// Fall back to the persisted last board, or report the send error when none
-// is stored.
-static void prv_departures_send_failed(void) {
-  prv_departures_offline_fallback(prv_send_error());
+// A tracked request that never left the watch (send or outbox failure)
+static void prv_send_failed(uint8_t op) {
+  if (op == OP_GET_DEPARTURES) {
+    DepartureBoard *board = model_board();
+    if (board->silent) {
+      board->silent = false;  // a background refresh: keep the board as is
+      return;
+    }
+    // Fall back to the persisted last board, or report the send error when
+    // none is stored
+    prv_departures_offline_fallback(prv_send_error());
+  } else if (op == OP_GET_TRIP) {
+    TripModel *trip = model_trip();
+    trip->loading = false;
+    trip->error = prv_send_error();
+    prv_notify_trip();
+  } else if (op == OP_GET_NEAREST) {
+    StopsModel *stops = model_stops();
+    stops->nearest_loading = false;
+    stops->nearest_error = prv_send_error();
+    prv_notify_stops();
+  }
 }
 
 static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason,
                               void *context) {
   APP_LOG(APP_LOG_LEVEL_ERROR, "outbox failed: %d", (int)reason);
   Tuple *op_tuple = dict_find(iter, MESSAGE_KEY_OP);
-  uint8_t op = op_tuple ? op_tuple->value->uint8 : 0;
-  if (op == OP_GET_DEPARTURES) {
-    prv_departures_send_failed();
-  } else if (op == OP_GET_NEAREST) {
-    StopsModel *stops = model_stops();
-    stops->nearest_loading = false;
-    stops->nearest_error = prv_send_error();
-    prv_notify_stops();
-  } else if (op == OP_GET_TRIP) {
-    TripModel *trip = model_trip();
-    trip->loading = false;
-    trip->error = prv_send_error();
-    prv_notify_trip();
-  }
+  prv_send_failed(op_tuple ? op_tuple->value->uint8 : 0);
 }
 
-// stop_name is sent only for departures: ids on api.dpmhk.cz are packet-scoped
-// (the weekly timetable reassigns them), so a favorite saved under a previous
-// packet holds a now-stale id. The phone re-resolves the name to the current
-// packet's id, making taps correct even before the favorites mirror refreshes.
-static bool prv_send_request_with_id(uint8_t op, const char *stop_id,
-                                     const char *stop_name,
-                                     uint32_t request_id) {
+static DictionaryIterator *prv_outbox_begin(uint8_t op, uint32_t request_id) {
   DictionaryIterator *iter;
   if (app_message_outbox_begin(&iter) != APP_MSG_OK) {
-    return false;
+    return NULL;
   }
   dict_write_uint8(iter, MESSAGE_KEY_OP, op);
   dict_write_uint32(iter, MESSAGE_KEY_REQUEST_ID, request_id);
-  if (stop_id) {
-    dict_write_cstring(iter, MESSAGE_KEY_STOP_ID, stop_id);
+  return iter;
+}
+
+static void prv_write_str(DictionaryIterator *iter, uint32_t key,
+                          const char *value) {
+  if (value[0]) {
+    dict_write_cstring(iter, key, value);
   }
-  if (stop_name && stop_name[0]) {
-    dict_write_cstring(iter, MESSAGE_KEY_META_STOP_NAME, stop_name);
+}
+
+// Every tracked request is rebuilt from the model, so a held one can be sent
+// later unchanged:
+// - GET_DEPARTURES: no stop id = launch, the phone picks the stop (index.js).
+//   The name lets the phone re-resolve packet-scoped ids (see Caching).
+// - GET_TRIP reuses row keys (ROW_LINE = line, ROW_DEST = destination text)
+//   plus the board's stop name; the phone resolves the /trasa direction.
+static bool prv_send_op(uint8_t op) {
+  DictionaryIterator *iter = prv_outbox_begin(op, s_request_counter);
+  if (!iter) {
+    return false;
+  }
+  const DepartureBoard *board = model_board();
+  if (op == OP_GET_DEPARTURES) {
+    prv_write_str(iter, MESSAGE_KEY_STOP_ID, board->stop_id);
+    prv_write_str(iter, MESSAGE_KEY_META_STOP_NAME, board->stop_name);
+  } else if (op == OP_GET_TRIP) {
+    const TripModel *trip = model_trip();
+    dict_write_cstring(iter, MESSAGE_KEY_ROW_LINE, trip->line);
+    dict_write_cstring(iter, MESSAGE_KEY_ROW_DEST, trip->dest);
+    prv_write_str(iter, MESSAGE_KEY_META_STOP_NAME, board->stop_name);
   }
   return app_message_outbox_send() == APP_MSG_OK;
 }
 
-static bool prv_send_request(uint8_t op, const char *stop_id) {
-  return prv_send_request_with_id(op, stop_id, NULL, s_request_counter);
+static void prv_dispatch(uint8_t op) {
+  if (!s_phone_ready && connection_service_peek_pebble_app_connection()) {
+    s_pending_op = op;
+    if (s_ready_timer) {
+      app_timer_reschedule(s_ready_timer, PHONE_READY_TIMEOUT_MS);
+    } else {
+      s_ready_timer =
+          app_timer_register(PHONE_READY_TIMEOUT_MS, prv_ready_timeout, NULL);
+    }
+    return;
+  }
+  if (!prv_send_op(op)) {
+    prv_send_failed(op);
+  }
+}
+
+static void prv_flush_pending(void) {
+  if (s_ready_timer) {
+    app_timer_cancel(s_ready_timer);
+    s_ready_timer = NULL;
+  }
+  uint8_t op = s_pending_op;
+  s_pending_op = 0;
+  if (op && !prv_send_op(op)) {
+    prv_send_failed(op);
+  }
+}
+
+static void prv_ready_timeout(void *data) {
+  s_ready_timer = NULL;
+  uint8_t op = s_pending_op;
+  s_pending_op = 0;
+  if (op) {
+    prv_send_failed(op);
+  }
+}
+
+bool comm_send_reminder(const char *line, const char *dest, const char *hhmm,
+                        const char *stop_name) {
+  DictionaryIterator *iter = prv_outbox_begin(OP_REMINDER, 0);
+  if (!iter) {
+    return false;
+  }
+  dict_write_cstring(iter, MESSAGE_KEY_ROW_LINE, line);
+  dict_write_cstring(iter, MESSAGE_KEY_ROW_DEST, dest);
+  dict_write_cstring(iter, MESSAGE_KEY_ROW_TIME, hhmm);
+  dict_write_cstring(iter, MESSAGE_KEY_META_STOP_NAME, stop_name);
+  return app_message_outbox_send() == APP_MSG_OK;
+}
+
+void comm_refresh_departures(void) {
+  DepartureBoard *board = model_board();
+  if (!s_phone_ready || board->silent) {
+    return;  // nothing to refresh against yet, or a refresh is in flight
+  }
+  s_request_counter++;
+  board->request_id = s_request_counter;
+  board->silent = true;
+  if (!prv_send_op(OP_GET_DEPARTURES)) {
+    board->silent = false;
+  }
 }
 
 void comm_request_departures(const char *stop_id, const char *stop_name) {
   s_request_counter++;
   model_board_begin_request(s_request_counter, stop_id, stop_name);
   prv_notify_board();
-  if (!prv_send_request_with_id(OP_GET_DEPARTURES, stop_id, stop_name,
-                                s_request_counter)) {
-    prv_departures_send_failed();
-  }
+  prv_dispatch(OP_GET_DEPARTURES);
 }
 
-static void prv_trip_send_failed(void) {
-  TripModel *trip = model_trip();
-  trip->loading = false;
-  trip->error = prv_send_error();
-  prv_notify_trip();
-}
-
-// Reuses row keys in the request dict (harmless): ROW_LINE = line,
-// ROW_DEST = destination text, META_STOP_NAME = current stop name. The phone
-// resolves the /trasa direction from these by name.
-static bool prv_send_trip_request(const char *line, const char *dest,
-                                  const char *stop_name) {
-  DictionaryIterator *iter;
-  if (app_message_outbox_begin(&iter) != APP_MSG_OK) {
-    return false;
-  }
-  dict_write_uint8(iter, MESSAGE_KEY_OP, OP_GET_TRIP);
-  dict_write_uint32(iter, MESSAGE_KEY_REQUEST_ID, s_request_counter);
-  dict_write_cstring(iter, MESSAGE_KEY_ROW_LINE, line);
-  dict_write_cstring(iter, MESSAGE_KEY_ROW_DEST, dest);
-  if (stop_name && stop_name[0]) {
-    dict_write_cstring(iter, MESSAGE_KEY_META_STOP_NAME, stop_name);
-  }
-  return app_message_outbox_send() == APP_MSG_OK;
-}
-
-void comm_request_trip(const char *line, const char *dest,
-                       const char *stop_name) {
+void comm_request_trip(const char *line, const char *dest) {
   s_request_counter++;
   model_trip_begin_request(s_request_counter, line, dest);
   prv_notify_trip();
-  if (!prv_send_trip_request(line, dest, stop_name)) {
-    prv_trip_send_failed();
-  }
+  prv_dispatch(OP_GET_TRIP);
 }
 
 void comm_request_nearest(void) {
@@ -376,22 +465,7 @@ void comm_request_nearest(void) {
   stops->nearest_error = ERR_NONE;
   stops->nearest_loading = true;
   prv_notify_stops();
-  if (!prv_send_request(OP_GET_NEAREST, NULL)) {
-    stops->nearest_loading = false;
-    stops->nearest_error = prv_send_error();
-    prv_notify_stops();
-  }
-}
-
-// Fire-and-forget: sent with REQUEST_ID 0 and WITHOUT bumping the request
-// counter — bumping it would strand in-flight tracked replies (their rows
-// would fail the stale-id check and e.g. nearest_loading would never clear)
-void comm_add_favorite(const char *stop_id) {
-  prv_send_request_with_id(OP_ADD_FAVORITE, stop_id, NULL, 0);
-}
-
-void comm_remove_favorite(const char *stop_id) {
-  prv_send_request_with_id(OP_REMOVE_FAVORITE, stop_id, NULL, 0);
+  prv_dispatch(OP_GET_NEAREST);
 }
 
 void comm_set_board_handler(CommUpdatedHandler handler) {

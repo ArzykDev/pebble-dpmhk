@@ -33,6 +33,7 @@ void model_board_begin_request(uint32_t request_id, const char *stop_id,
   s_board.error = ERR_NONE;
   s_board.request_id = request_id;
   s_board.loading = true;
+  s_board.silent = false;
   s_board.fetched_at[0] = '\0';
   strncpy(s_board.stop_id, stop_id, ID_LEN - 1);
   s_board.stop_id[ID_LEN - 1] = '\0';

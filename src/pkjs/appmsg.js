@@ -6,8 +6,8 @@ var OP = {
   GET_NEAREST: 2,
   GET_TRIP: 3,
   FAVORITES: 4,
-  ADD_FAVORITE: 5,
-  REMOVE_FAVORITE: 6,
+  // 5/6 (watch-side favorite add/remove) are retired: favorites live in Clay
+  REMINDER: 7, // watch → phone: (re)place or, with no time, drop the pin
 };
 
 var ERR = {
@@ -85,6 +85,7 @@ function sendErrorHeader(requestId, op, errCode) {
 
 // items: [{line, dest, time, delay}]
 // stopName may be null — the watch then keeps the name it already has.
+// opts.stopId names the stop the phone chose (launch requests carry none).
 function sendDepartures(requestId, stopName, items, opts) {
   opts = opts || {};
   var header = {
@@ -92,11 +93,13 @@ function sendDepartures(requestId, stopName, items, opts) {
     OP: OP.GET_DEPARTURES,
     META_COUNT: items.length,
     META_FLAGS: opts.flags || 0,
-    META_FETCHED_AT: opts.fetchedAt || '',
     ERROR: opts.error || ERR.NONE,
   };
   if (stopName) {
     header.META_STOP_NAME = stopName;
+  }
+  if (opts.stopId) {
+    header.STOP_ID = opts.stopId;
   }
   var msgs = [header];
   items.forEach(function (it, i) {
@@ -150,15 +153,18 @@ function linesField(linky) {
 
 // stops: [{id, name, dist, linky}] — dist is a preformatted string like
 // "320 m", linky the served lines
-function sendStops(requestId, op, stops, error) {
-  var msgs = [
-    {
-      REQUEST_ID: requestId,
-      OP: op,
-      META_COUNT: stops.length,
-      ERROR: error || ERR.NONE,
-    },
-  ];
+// remindLead (favorites push only): reminder lead in minutes for the watch
+function sendStops(requestId, op, stops, error, remindLead) {
+  var header = {
+    REQUEST_ID: requestId,
+    OP: op,
+    META_COUNT: stops.length,
+    ERROR: error || ERR.NONE,
+  };
+  if (remindLead) {
+    header.REMIND_LEAD = remindLead;
+  }
+  var msgs = [header];
   stops.forEach(function (s, i) {
     msgs.push({
       REQUEST_ID: requestId,

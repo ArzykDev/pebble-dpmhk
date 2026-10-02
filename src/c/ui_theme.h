@@ -38,6 +38,16 @@ void theme_draw_status(GContext *ctx, GRect rect, uint32_t resource_id,
 // (large) or small icon.
 const char *theme_error_status(uint8_t error, bool small, uint32_t *icon);
 
+// Horizontal inset that keeps a text slice (rows y..y+h of a menu cell) clear
+// of the display edge: on round screens it follows the circle at the slice's
+// actual screen position, so unfocused rows near the top/bottom inset more.
+int theme_row_inset(const Layer *cell_layer, int y, int h);
+
+// Menu section header; centered on round screens, where the stock left-
+// aligned header is cut by the circle.
+void theme_draw_header(GContext *ctx, const Layer *cell_layer,
+                       const char *text);
+
 // Apply the DPMHK-branded selection highlight to a menu (works on every
 // platform; degrades to black/white on mono).
 void theme_apply_menu(MenuLayer *menu);

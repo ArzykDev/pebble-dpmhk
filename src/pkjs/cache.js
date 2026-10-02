@@ -1,5 +1,6 @@
 // Phone-side localStorage cache.
-// Keys: stations:packet, stations:list, cfg:favorites
+// Keys: stations:packet, stations:list, cfg:favorites, cfg:remindLead,
+// reminder:pin
 //
 // Departure boards are NOT cached here: a board is a snapshot of the next few
 // minutes, so a replayed copy shows already-departed buses and stale delays.
@@ -13,6 +14,9 @@ var KEY_STATIONS_PACKET = 'stations:packet';
 var KEY_STATIONS = 'stations:list';
 var KEY_STATIONS_AT = 'stations:at';
 var KEY_FAVORITES = 'cfg:favorites';
+var KEY_REMIND_LEAD = 'cfg:remindLead';
+var KEY_REMINDER_PIN = 'reminder:pin';
+var DEFAULT_REMIND_LEAD = 5;
 
 // The backend reassigns stop ids WITHIN a weekly packet — it edits the station
 // list mid-week (e.g. packet 187 grew 204->205 stops, shifting every id by
@@ -98,8 +102,30 @@ function setFavorites(list) {
   setJSON(KEY_FAVORITES, list);
 }
 
+// Minutes before a departure that a watch reminder fires
+function getRemindLead() {
+  return getJSON(KEY_REMIND_LEAD) || DEFAULT_REMIND_LEAD;
+}
+
+function setRemindLead(minutes) {
+  setJSON(KEY_REMIND_LEAD, minutes);
+}
+
+// Id of the current reminder's timeline pin, null when none
+function getReminderPin() {
+  return getJSON(KEY_REMINDER_PIN);
+}
+
+function setReminderPin(id) {
+  setJSON(KEY_REMINDER_PIN, id);
+}
+
 module.exports = {
+  getReminderPin: getReminderPin,
+  setReminderPin: setReminderPin,
   getStations: getStations,
   getFavorites: getFavorites,
   setFavorites: setFavorites,
+  getRemindLead: getRemindLead,
+  setRemindLead: setRemindLead,
 };

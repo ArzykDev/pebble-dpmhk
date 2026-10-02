@@ -233,6 +233,11 @@ void theme_draw_status(GContext *ctx, GRect rect, uint32_t resource_id,
 }
 
 const char *theme_error_status(uint8_t error, bool small, uint32_t *icon) {
+  if (error == ERR_GPS) {
+    *icon = small ? RESOURCE_ID_ICON_SMALL_LOCATION
+                  : RESOURCE_ID_ICON_STATUS_NO_LOCATION;
+    return STR_NO_LOCATION;
+  }
   if (error == ERR_PHONE) {
     *icon = small ? RESOURCE_ID_ICON_SMALL_WARNING
                   : RESOURCE_ID_ICON_STATUS_DISCONNECTED;
@@ -241,6 +246,57 @@ const char *theme_error_status(uint8_t error, bool small, uint32_t *icon) {
   *icon = small ? RESOURCE_ID_ICON_SMALL_WARNING
                 : RESOURCE_ID_ICON_STATUS_NO_CONNECTION;
   return STR_CONN_ERROR;
+}
+
+#if defined(PBL_ROUND)
+static int prv_isqrt(int n) {
+  int x = 0;
+  while ((x + 1) * (x + 1) <= n) {
+    x++;
+  }
+  return x;
+}
+#endif
+
+int theme_row_inset(const Layer *cell_layer, int y, int h) {
+  const int pad = 4;
+#if defined(PBL_ROUND)
+  const int r = PBL_DISPLAY_WIDTH / 2;
+  GRect s = layer_convert_rect_to_screen(cell_layer, GRect(0, y, 1, h));
+  // The chord is narrowest at the slice edge farthest from the centre line
+  int d_top = s.origin.y - r;
+  int d_bot = s.origin.y + h - r;
+  int d = abs(d_top) > abs(d_bot) ? abs(d_top) : abs(d_bot);
+  // Capped: a slice beyond the circle is off-screen anyway, and an inset
+  // near r would give callers negative-width text rects (a firmware fault)
+  const int max_inset = r / 2;
+  if (d >= r) {
+    return max_inset;
+  }
+  int inset = r - prv_isqrt(r * r - d * d) + pad;
+  return inset < max_inset ? inset : max_inset;
+#else
+  (void)cell_layer;
+  (void)y;
+  (void)h;
+  return pad;
+#endif
+}
+
+void theme_draw_header(GContext *ctx, const Layer *cell_layer,
+                       const char *text) {
+#if defined(PBL_ROUND)
+  GRect bounds = layer_get_bounds(cell_layer);
+  int inset = theme_row_inset(cell_layer, 0, bounds.size.h);
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                     GRect(inset, -2, bounds.size.w - 2 * inset,
+                           bounds.size.h + 2),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter,
+                     NULL);
+#else
+  menu_cell_basic_header_draw(ctx, cell_layer, text);
+#endif
 }
 
 void theme_apply_menu(MenuLayer *menu) {

@@ -23,6 +23,17 @@ function buildConfig() {
       attributes: { placeholder: 'Název zastávky' },
     });
   }
+  items.push({
+    type: 'select',
+    messageKey: 'REMIND_LEAD',
+    label: 'Připomenout odjezd předem',
+    defaultValue: '5',
+    options: [
+      { label: '2 min', value: '2' },
+      { label: '5 min', value: '5' },
+      { label: '10 min', value: '10' },
+    ],
+  });
   items.push({ type: 'submit', defaultValue: 'Uložit' });
 
   return [{ type: 'section', items: items }];
