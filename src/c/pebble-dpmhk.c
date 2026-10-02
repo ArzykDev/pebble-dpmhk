@@ -2,6 +2,7 @@
 
 #include "comm.h"
 #include "persist.h"
+#include "windows/departures_window.h"
 #include "windows/stops_window.h"
 
 static void prv_init(void) {
@@ -12,7 +13,9 @@ static void prv_init(void) {
 #endif
   persist_load_favorites();
   comm_init();
+  // The stop list stays underneath: Back from the launch board reaches it
   stops_window_push();
+  departures_window_push_auto();
 }
 
 static void prv_deinit(void) {

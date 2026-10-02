@@ -24,28 +24,39 @@ function formatDist(m) {
   return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km';
 }
 
-// cb(errCode, stops[{id, name, dist, linky}])
-function findNearest(maxCount, cb) {
+// cb(errCode, lat, lon)
+function locate(cb) {
   if (!navigator.geolocation) {
     cb(appmsg.ERR.GPS);
     return;
   }
   navigator.geolocation.getCurrentPosition(function (pos) {
+    cb(appmsg.ERR.NONE, pos.coords.latitude, pos.coords.longitude);
+  }, function () {
+    cb(appmsg.ERR.GPS);
+  }, GEO_OPTS);
+}
+
+// Metres from (lat, lon) to a station
+function distanceTo(lat, lon, station) {
+  return haversine(lat, lon, station.lat, station.lng);
+}
+
+// cb(errCode, stops[{id, name, dist, linky}])
+function findNearest(maxCount, cb) {
+  locate(function (gErr, lat, lon) {
+    if (gErr) {
+      cb(gErr);
+      return;
+    }
     cache.getStations(function (err, stations) {
       if (err) {
         cb(appmsg.errCode(err));
         return;
       }
-      var lat = pos.coords.latitude;
-      var lon = pos.coords.longitude;
       var nearest = stations
         .map(function (s) {
-          return {
-            id: String(s.id),
-            name: s.name,
-            linky: s.linky,
-            m: haversine(lat, lon, s.lat, s.lng),
-          };
+          return { s: s, m: distanceTo(lat, lon, s) };
         })
         .sort(function (a, b) {
           return a.m - b.m;
@@ -53,19 +64,19 @@ function findNearest(maxCount, cb) {
         .slice(0, maxCount)
         .map(function (r) {
           return {
-            id: r.id,
-            name: r.name,
+            id: String(r.s.id),
+            name: r.s.name,
             dist: formatDist(r.m),
-            linky: r.linky,
+            linky: r.s.linky,
           };
         });
       cb(appmsg.ERR.NONE, nearest);
     });
-  }, function () {
-    cb(appmsg.ERR.GPS);
-  }, GEO_OPTS);
+  });
 }
 
 module.exports = {
+  locate: locate,
+  distanceTo: distanceTo,
   findNearest: findNearest,
 };

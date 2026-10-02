@@ -10,14 +10,12 @@
 #define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 #define LINE_BOX_W 40
 #define SMALL_TIME_W 44
-#define ACTION_ROW_HEIGHT 36
+#define FOOTER_ROW_HEIGHT 36
 
-// Board rows, then tappable actions: touch has no long-press, so refresh and
-// the favorite toggle need rows of their own.
+// Board rows, then the freshness footer (touch has no long-press, so refresh
+// needs a row of its own).
 #define SECTION_BOARD 0
-#define SECTION_ACTIONS 1
-#define ACTION_REFRESH 0
-#define ACTION_FAVORITE 1
+#define SECTION_FOOTER 1
 
 // Board reveal: each row slides REVEAL_TRAVEL units, later rows delayed by
 // REVEAL_STAGGER. Progress must run past the last staggered row or it snaps.
@@ -29,7 +27,6 @@
 static Window *s_window;
 static MenuLayer *s_menu_layer;
 static StatusBarLayer *s_status_bar;
-static char s_header_text[NAME_LEN + TIME_LEN + 12];
 
 // Board reveal cascade: rows slide in from the right, later rows lag behind.
 static Animation *s_reveal_anim;
@@ -131,9 +128,9 @@ static uint16_t prv_get_num_sections(MenuLayer *menu_layer, void *context) {
 
 static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                  void *context) {
-  if (section_index == SECTION_ACTIONS) {
-    // Hidden mid-load: refreshing again or toggling a half-loaded stop is moot
-    return model_board()->loading ? 0 : 2;
+  if (section_index == SECTION_FOOTER) {
+    // Hidden mid-load: refreshing a board that is still arriving is moot
+    return model_board()->loading ? 0 : 1;
   }
   const DepartureBoard *board = model_board();
   return board->count > 0 ? board->count : 1;
@@ -141,8 +138,8 @@ static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
 
 static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
                                    void *context) {
-  if (cell_index->section == SECTION_ACTIONS) {
-    return ACTION_ROW_HEIGHT;
+  if (cell_index->section == SECTION_FOOTER) {
+    return FOOTER_ROW_HEIGHT;
   }
   if (model_board()->count > 0) {
     return ROW_HEIGHT;
@@ -151,7 +148,7 @@ static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
   // peeking below
   GRect frame = layer_get_bounds(menu_layer_get_layer(menu_layer));
   int h = frame.size.h - MENU_CELL_BASIC_HEADER_HEIGHT -
-          (model_board()->loading ? 0 : ACTION_ROW_HEIGHT);
+          (model_board()->loading ? 0 : FOOTER_ROW_HEIGHT);
   return h > STATUS_ROW_HEIGHT ? h : STATUS_ROW_HEIGHT;
 }
 
@@ -162,15 +159,10 @@ static int16_t prv_get_header_height(MenuLayer *menu_layer,
 
 static void prv_draw_header(GContext *ctx, const Layer *cell_layer,
                             uint16_t section_index, void *context) {
+  // Launch opens a stop the phone picks, so always say which one it is
   const DepartureBoard *board = model_board();
-  if (board->flags & BOARD_FLAG_CACHED) {
-    // Staleness beats the stop name (which the user just selected anyway)
-    snprintf(s_header_text, sizeof(s_header_text), STR_OFFLINE_FMT,
-             board->fetched_at);
-  } else {
-    snprintf(s_header_text, sizeof(s_header_text), "%s", board->stop_name);
-  }
-  menu_cell_basic_header_draw(ctx, cell_layer, s_header_text);
+  menu_cell_basic_header_draw(
+      ctx, cell_layer, board->stop_name[0] ? board->stop_name : STR_LOCATING);
 }
 
 // Tint the departure time by realtime delay on color platforms
@@ -191,36 +183,48 @@ static GColor prv_time_color(const Departure *dep, bool highlighted) {
   return highlighted ? GColorWhite : GColorBlack;
 }
 
-static void prv_draw_action(GContext *ctx, const Layer *cell_layer,
-                            uint16_t row) {
+// "Aktualizováno HH:MM ↻": shows how fresh the board is and refreshes on
+// select/tap. The glyph is drawn (system fonts lack ↻ on some platforms).
+static void prv_draw_footer(GContext *ctx, const Layer *cell_layer) {
   GRect bounds = layer_get_bounds(cell_layer);
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
   GColor fg = highlighted ? GColorWhite : GColorBlack;
   GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
-  const char *text =
-      row == ACTION_REFRESH                           ? STR_REFRESH
-      : model_find_favorite(model_board()->stop_name) ? STR_FAV_REMOVE
-                                                      : STR_FAV_ADD;
-  int star_w = row == ACTION_FAVORITE ? 20 : 0;
-  GRect box = GRect(MARGIN, 0, bounds.size.w - 2 * MARGIN, bounds.size.h);
+  const DepartureBoard *board = model_board();
+  char text[32];
+  snprintf(text, sizeof(text),
+           (board->flags & BOARD_FLAG_CACHED) ? STR_OFFLINE_FMT
+                                              : STR_UPDATED_FMT,
+           board->fetched_at);
+  const int glyph_w = 18;
   GSize ts = graphics_text_layout_get_content_size(
-      text, font, GRect(0, 0, box.size.w - star_w, box.size.h),
+      text, font, GRect(0, 0, bounds.size.w - 2 * MARGIN - glyph_w, 24),
       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-  int x = box.origin.x + (box.size.w - ts.w - star_w) / 2;
-  if (star_w) {
-    theme_draw_star(ctx, GPoint(x + 8, bounds.size.h / 2), highlighted);
-  }
+  int x = (bounds.size.w - ts.w - glyph_w) / 2;
   graphics_context_set_text_color(ctx, fg);
   graphics_draw_text(ctx, text, font,
-                     GRect(x + star_w, (bounds.size.h - 24) / 2, ts.w, 24),
+                     GRect(x, (bounds.size.h - 24) / 2, ts.w, 24),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
+  GPoint c = GPoint(x + ts.w + glyph_w / 2 + 2, bounds.size.h / 2 + 1);
+  graphics_context_set_stroke_color(ctx, fg);
+  graphics_context_set_stroke_width(ctx, 2);
+  graphics_draw_arc(ctx, GRect(c.x - 6, c.y - 6, 13, 13), GOvalScaleModeFitCircle,
+                    DEG_TO_TRIGANGLE(60), DEG_TO_TRIGANGLE(360));
+  // Arrowhead at the arc's open end (top)
+  graphics_context_set_fill_color(ctx, fg);
+  GPathInfo head = {.num_points = 3,
+                    .points = (GPoint[]){{c.x + 1, c.y - 9}, {c.x + 6, c.y - 6},
+                                         {c.x + 1, c.y - 2}}};
+  GPath *p = gpath_create(&head);
+  gpath_draw_filled(ctx, p);
+  gpath_destroy(p);
 }
 
 static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
                          MenuIndex *cell_index, void *context) {
-  if (cell_index->section == SECTION_ACTIONS) {
-    prv_draw_action(ctx, cell_layer, cell_index->row);
+  if (cell_index->section == SECTION_FOOTER) {
+    prv_draw_footer(ctx, cell_layer);
     return;
   }
   const DepartureBoard *board = model_board();
@@ -300,19 +304,8 @@ static void prv_refresh(void) {
 static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
                              void *context) {
   const DepartureBoard *board = model_board();
-  if (cell_index->section == SECTION_ACTIONS) {
-    if (cell_index->row == ACTION_REFRESH) {
-      prv_refresh();
-      return;
-    }
-    // The phone answers with a favorites push, which relabels this row
-    const StopRef *fav = model_find_favorite(board->stop_name);
-    vibes_short_pulse();
-    if (fav) {
-      comm_remove_favorite(fav->id);
-    } else {
-      comm_add_favorite(board->stop_id);
-    }
+  if (cell_index->section == SECTION_FOOTER) {
+    prv_refresh();
     return;
   }
   // Open the route of the tapped departure (downstream stops)
@@ -325,7 +318,7 @@ static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
 
 static void prv_select_long_click(MenuLayer *menu_layer, MenuIndex *cell_index,
                                   void *context) {
-  // Button shortcut for the Obnovit row
+  // Button shortcut for the footer's refresh
   prv_refresh();
 }
 
@@ -404,7 +397,7 @@ static void prv_window_unload(Window *window) {
   s_window = NULL;
 }
 
-void departures_window_push(const StopRef *stop) {
+static void prv_push(bool animated) {
   if (!s_window) {
     s_window = window_create();
     window_set_window_handlers(s_window, (WindowHandlers){
@@ -412,6 +405,15 @@ void departures_window_push(const StopRef *stop) {
         .unload = prv_window_unload,
     });
   }
-  window_stack_push(s_window, true);
+  window_stack_push(s_window, animated);
+}
+
+void departures_window_push(const StopRef *stop) {
+  prv_push(true);
   comm_request_departures(stop->id, stop->name);
+}
+
+void departures_window_push_auto(void) {
+  prv_push(false);
+  comm_request_departures("", "");
 }

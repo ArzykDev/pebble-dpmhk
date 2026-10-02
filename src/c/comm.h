@@ -7,8 +7,7 @@ enum {
   OP_GET_NEAREST = 2,
   OP_GET_TRIP = 3,         // route stops a chosen departure passes through
   OP_FAVORITES = 4,        // push from JS (config closed / favorites changed)
-  OP_ADD_FAVORITE = 5,     // watch long-press on a nearest stop
-  OP_REMOVE_FAVORITE = 6,  // watch long-press on a favorite
+  // 5/6 (watch-side favorite add/remove) are retired: favorites live in Clay
 };
 
 typedef void (*CommUpdatedHandler)(void);
@@ -30,6 +29,3 @@ void comm_request_nearest(void);
 void comm_request_trip(const char *line, const char *dest,
                        const char *stop_name);
 
-// Fire-and-forget; JS answers with an OP_FAVORITES push that updates the model
-void comm_add_favorite(const char *stop_id);
-void comm_remove_favorite(const char *stop_id);

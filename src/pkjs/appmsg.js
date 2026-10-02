@@ -6,8 +6,7 @@ var OP = {
   GET_NEAREST: 2,
   GET_TRIP: 3,
   FAVORITES: 4,
-  ADD_FAVORITE: 5,
-  REMOVE_FAVORITE: 6,
+  // 5/6 (watch-side favorite add/remove) are retired: favorites live in Clay
 };
 
 var ERR = {
@@ -85,6 +84,7 @@ function sendErrorHeader(requestId, op, errCode) {
 
 // items: [{line, dest, time, delay}]
 // stopName may be null — the watch then keeps the name it already has.
+// opts.stopId names the stop the phone chose (launch requests carry none).
 function sendDepartures(requestId, stopName, items, opts) {
   opts = opts || {};
   var header = {
@@ -97,6 +97,9 @@ function sendDepartures(requestId, stopName, items, opts) {
   };
   if (stopName) {
     header.META_STOP_NAME = stopName;
+  }
+  if (opts.stopId) {
+    header.STOP_ID = opts.stopId;
   }
   var msgs = [header];
   items.forEach(function (it, i) {

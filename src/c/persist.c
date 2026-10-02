@@ -95,11 +95,14 @@ bool persist_load_board(const char *stop_id) {
   }
   PersistBoard blob;
   int read = persist_read_data(PERSIST_KEY_LAST_BOARD, &blob, sizeof(blob));
+  // An empty stop_id (launch, phone unreachable) takes whatever was stored
   if (read < (int)sizeof(blob) || blob.count > PERSIST_BOARD_ROWS ||
-      strncmp(blob.stop_id, stop_id, ID_LEN) != 0) {
+      (stop_id[0] && strncmp(blob.stop_id, stop_id, ID_LEN) != 0)) {
     return false;
   }
   DepartureBoard *board = model_board();
+  strncpy(board->stop_id, blob.stop_id, ID_LEN - 1);
+  board->stop_id[ID_LEN - 1] = '\0';
   board->count = blob.count;
   board->expected = blob.count;
   board->flags = BOARD_FLAG_CACHED | BOARD_FLAG_STALE;

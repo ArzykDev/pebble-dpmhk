@@ -163,20 +163,6 @@ static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
   }
 }
 
-static void prv_select_long_click(MenuLayer *menu_layer, MenuIndex *cell_index,
-                                  void *context) {
-  StopsModel *stops = model_stops();
-  if (cell_index->section == SECTION_FAVORITES) {
-    if (stops->favorites_count > 0) {
-      vibes_short_pulse();
-      comm_remove_favorite(stops->favorites[cell_index->row].id);
-    }
-  } else if (stops->nearest_count > 0) {
-    vibes_short_pulse();
-    comm_add_favorite(stops->nearest[cell_index->row].id);
-  }
-}
-
 static void prv_stops_updated(void) {
   if (s_menu_layer) {
     menu_layer_reload_data(s_menu_layer);
@@ -198,7 +184,6 @@ static void prv_window_load(Window *window) {
       .draw_header = prv_draw_header,
       .draw_row = prv_draw_row,
       .select_click = prv_select_click,
-      .select_long_click = prv_select_long_click,
   });
 #if defined(PBL_ROUND)
   menu_layer_set_center_focused(s_menu_layer, true);
