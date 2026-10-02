@@ -22,7 +22,7 @@ function pushFavoritesToWatch(favorites, stations) {
   });
   appmsg.sendStops(0, appmsg.OP.FAVORITES, favorites.map(function (f) {
     return { id: f.id, name: f.name, linky: linkyById[f.id] };
-  }));
+  }), null, { REMIND_LEAD: cache.getRemindLead() });
 }
 
 // Map folded stop name -> station for the current packet. Stop ids are
@@ -264,6 +264,12 @@ Pebble.addEventListener('webviewclosed', function (e) {
   } catch (err) {
     console.log('config parse failed: ' + err);
     return;
+  }
+
+  var lead = settings.REMIND_LEAD;
+  lead = parseInt(lead && lead.value !== undefined ? lead.value : lead, 10);
+  if (lead > 0) {
+    cache.setRemindLead(lead);
   }
 
   cache.getStations(function (err2, stations) {

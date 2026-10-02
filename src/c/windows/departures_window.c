@@ -360,7 +360,7 @@ static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
     return;
   }
   const Departure *dep = &board->items[s_groups[cell_index->row].items[0]];
-  trip_window_push(dep->line, dep->dest);
+  trip_window_push(dep->line, dep->dest, dep->time);
 }
 
 static void prv_select_long_click(MenuLayer *menu_layer, MenuIndex *cell_index,

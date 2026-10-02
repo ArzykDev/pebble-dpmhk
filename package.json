@@ -51,7 +51,8 @@
       "FAV_3",
       "FAV_4",
       "FAV_5",
-      "FAV_6"
+      "FAV_6",
+      "REMIND_LEAD"
     ],
     "resources": {
       "media": [
@@ -204,6 +205,27 @@
           "type": "bitmap",
           "name": "ICON_SMALL_WARNING",
           "file": "images/small_warning-aplite.png",
+          "targetPlatforms": [
+            "aplite"
+          ]
+        },
+        {
+          "type": "raw",
+          "name": "ICON_SMALL_ALARM",
+          "file": "images/small_alarm.pdc",
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_SMALL_ALARM",
+          "file": "images/small_alarm-aplite.png",
           "targetPlatforms": [
             "aplite"
           ]

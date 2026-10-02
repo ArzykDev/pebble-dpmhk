@@ -19,3 +19,11 @@
 #define STR_OFFLINE_FMT   "Offline (%s)"
 #define STR_UPDATED_FMT   "Aktualizováno %s"
 #define STR_LOCATING      "Hledám zastávku…"
+#define STR_REMIND_FMT    "Připomenout %s"
+#define STR_REMIND_SOON_FMT "Odjíždí v %s"
+#define STR_REMIND_CANCEL "Zrušit připomenutí"
+#if defined(PBL_PLATFORM_APLITE)
+#define STR_TRIP_ARROW    ">"  // aplite's system font lacks the arrow glyph
+#else
+#define STR_TRIP_ARROW    "→"
+#endif

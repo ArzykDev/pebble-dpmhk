@@ -2,6 +2,7 @@
 
 #include "model.h"
 #include "persist.h"
+#include "reminder.h"
 
 #if defined(PBL_PLATFORM_APLITE)
 #define INBOX_SIZE 512
@@ -15,8 +16,9 @@ static CommUpdatedHandler s_stops_handler;
 static CommUpdatedHandler s_trip_handler;
 static uint32_t s_request_counter;
 // PebbleKit JS may not be running yet when the app launches; messages sent
-// before its 'ready' are lost. The launch request waits for the first message
-// from the phone (index.js pushes cached favorites on 'ready').
+// before its 'ready' are lost. A board requested at launch (smart launch or a
+// reminder) waits for the first message from the phone (index.js pushes
+// cached favorites on 'ready').
 #define LAUNCH_TIMEOUT_MS 10000
 static bool s_phone_ready;
 static bool s_launch_pending;
@@ -151,6 +153,10 @@ static void prv_handle_stops_header(DictionaryIterator *iter, uint8_t op) {
     stops->nearest_error = err;
     stops->nearest_loading = (err == ERR_NONE && expected > 0);
   } else {  // OP_FAVORITES
+    Tuple *lead = dict_find(iter, MESSAGE_KEY_REMIND_LEAD);
+    if (lead) {
+      reminder_set_lead(lead->value->uint8);
+    }
     stops->favorites_count = 0;
     if (expected > MAX_FAVORITES) {
       expected = MAX_FAVORITES;
@@ -377,8 +383,9 @@ static void prv_send_launch(void) {
   if (model_board()->request_id != s_request_counter) {
     return;
   }
-  if (!prv_send_request_with_id(OP_GET_DEPARTURES, NULL, NULL,
-                                s_request_counter)) {
+  const DepartureBoard *board = model_board();
+  if (!prv_send_request_with_id(OP_GET_DEPARTURES, board->stop_id,
+                                board->stop_name, s_request_counter)) {
     prv_departures_send_failed();
   }
 }
@@ -395,8 +402,7 @@ void comm_request_departures(const char *stop_id, const char *stop_name) {
   s_request_counter++;
   model_board_begin_request(s_request_counter, stop_id, stop_name);
   prv_notify_board();
-  if (!stop_id[0] && !s_phone_ready &&
-      connection_service_peek_pebble_app_connection()) {
+  if (!s_phone_ready && connection_service_peek_pebble_app_connection()) {
     s_launch_pending = true;
     s_launch_timer =
         app_timer_register(LAUNCH_TIMEOUT_MS, prv_launch_timeout, NULL);

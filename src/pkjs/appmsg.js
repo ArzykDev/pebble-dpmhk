@@ -153,15 +153,18 @@ function linesField(linky) {
 
 // stops: [{id, name, dist, linky}] — dist is a preformatted string like
 // "320 m", linky the served lines
-function sendStops(requestId, op, stops, error) {
-  var msgs = [
-    {
-      REQUEST_ID: requestId,
-      OP: op,
-      META_COUNT: stops.length,
-      ERROR: error || ERR.NONE,
-    },
-  ];
+// extra: additional header fields (the favorites push carries REMIND_LEAD)
+function sendStops(requestId, op, stops, error, extra) {
+  var header = {
+    REQUEST_ID: requestId,
+    OP: op,
+    META_COUNT: stops.length,
+    ERROR: error || ERR.NONE,
+  };
+  Object.keys(extra || {}).forEach(function (k) {
+    header[k] = extra[k];
+  });
+  var msgs = [header];
   stops.forEach(function (s, i) {
     msgs.push({
       REQUEST_ID: requestId,
