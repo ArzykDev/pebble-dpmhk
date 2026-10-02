@@ -23,6 +23,9 @@ void comm_set_stops_handler(CommUpdatedHandler handler);
 void comm_set_trip_handler(CommUpdatedHandler handler);
 
 void comm_request_departures(const char *stop_id, const char *stop_name);
+// Re-fetch the current board in the background: it stays on screen until the
+// new one has fully arrived, and survives a failed fetch.
+void comm_refresh_departures(void);
 void comm_request_nearest(void);
 // Fetch the downstream stops of a departure (line + destination text) from the
 // given current stop; the phone resolves the /trasa direction by name.

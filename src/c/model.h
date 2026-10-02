@@ -63,6 +63,9 @@ typedef struct {
   uint8_t error;              // ERR_*
   uint32_t request_id;
   bool loading;
+  // Background refresh: the old board stays on screen (no reset, no repaint)
+  // until the new one is complete; a failure keeps it as is.
+  bool silent;
 } DepartureBoard;
 
 typedef struct {

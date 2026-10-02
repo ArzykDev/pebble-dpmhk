@@ -9,7 +9,10 @@
 #define STATUS_ROW_HEIGHT 32
 #define MARGIN PBL_IF_ROUND_ELSE(18, 4)
 #define LINE_BOX_W 40
-#define SMALL_TIME_W 44
+#define GROUP_TIMES 3  // next departures shown per line+destination row
+// The API has no realtime data, so re-fetch only when the board went stale:
+// its earliest departure left, or it is this many minutes old.
+#define REFRESH_AFTER_MIN 5
 #define FOOTER_ROW_HEIGHT 36
 
 // Board rows, then the freshness footer (touch has no long-press, so refresh
@@ -32,6 +35,15 @@ static StatusBarLayer *s_status_bar;
 static Animation *s_reveal_anim;
 static int s_reveal;  // 0..REVEAL_SPAN, REVEAL_SPAN = fully revealed
 static uint8_t s_prev_count;
+// One row per line+destination with its next departures (indices into the
+// board, chronological). Rebuilt when the board changes and every minute, so
+// departed times drop out.
+typedef struct {
+  uint8_t items[GROUP_TIMES];
+  uint8_t n;
+} Group;
+static Group s_groups[MAX_DEPARTURES];
+static uint8_t s_group_count;
 // Animated "Načítám" ellipsis while a fresh board is in flight.
 static AppTimer *s_load_timer;
 static uint8_t s_load_phase;
@@ -122,6 +134,72 @@ static const char *prv_status_message(const DepartureBoard *board,
   return theme_error_status(board->error, false, icon);
 }
 
+static void prv_regroup(void) {
+  const DepartureBoard *board = model_board();
+  s_group_count = 0;
+  for (uint8_t i = 0; i < board->count; i++) {
+    const Departure *dep = &board->items[i];
+    int mins = theme_minutes_until(dep->time);
+    if (mins != THEME_MIN_INVALID && mins < 0) {
+      continue;  // departed
+    }
+    Group *g = NULL;
+    for (uint8_t j = 0; j < s_group_count; j++) {
+      const Departure *first = &board->items[s_groups[j].items[0]];
+      if (strcmp(first->line, dep->line) == 0 &&
+          strcmp(first->dest, dep->dest) == 0) {
+        g = &s_groups[j];
+        break;
+      }
+    }
+    if (!g) {
+      g = &s_groups[s_group_count++];
+      g->n = 0;
+    }
+    if (g->n < GROUP_TIMES) {
+      g->items[g->n++] = i;
+    }
+  }
+}
+
+// "4 · 19 · 34 min", "52 min · 22:51": minutes under an hour, the clock after,
+// "min" once per run of minute values. Adds times only while they fit width.
+static void prv_format_times(const Group *g, GFont font, int width, char *out,
+                             size_t size) {
+  const DepartureBoard *board = model_board();
+  out[0] = '\0';
+  for (uint8_t k = 0; k < g->n; k++) {
+    const char *time = board->items[g->items[k]].time;
+    int mins = theme_minutes_until(time);
+    bool is_min = mins != THEME_MIN_INVALID && mins < 60;
+    char token[16];
+    if (!is_min) {
+      snprintf(token, sizeof(token), "%s", time);
+    } else if (mins == 0) {
+      snprintf(token, sizeof(token), "%s", STR_NOW);
+    } else {
+      snprintf(token, sizeof(token), "%d", mins);
+    }
+    // "min" closes a run of minutes: before a clock time or at the very end
+    bool next_is_min = false;
+    if (k + 1 < g->n) {
+      int next = theme_minutes_until(board->items[g->items[k + 1]].time);
+      next_is_min = next != THEME_MIN_INVALID && next < 60 && next > 0;
+    }
+    bool add_unit = is_min && mins > 0 && !next_is_min;
+    size_t len = strlen(out);
+    snprintf(out + len, size - len, "%s%s%s", k ? " · " : "", token,
+             add_unit ? " " STR_MIN_UNIT : "");
+    if (k > 0 && graphics_text_layout_get_content_size(
+                     out, font, GRect(0, 0, 1000, 30), GTextOverflowModeFill,
+                     GTextAlignmentLeft)
+                         .w > width) {
+      out[len] = '\0';  // didn't fit: keep the times that did
+      break;
+    }
+  }
+}
+
 static uint16_t prv_get_num_sections(MenuLayer *menu_layer, void *context) {
   return 2;
 }
@@ -130,10 +208,10 @@ static uint16_t prv_get_num_rows(MenuLayer *menu_layer, uint16_t section_index,
                                  void *context) {
   if (section_index == SECTION_FOOTER) {
     // Hidden mid-load: refreshing a board that is still arriving is moot
-    return model_board()->loading ? 0 : 1;
+    const DepartureBoard *board = model_board();
+    return board->loading && !board->silent ? 0 : 1;
   }
-  const DepartureBoard *board = model_board();
-  return board->count > 0 ? board->count : 1;
+  return s_group_count > 0 ? s_group_count : 1;
 }
 
 static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
@@ -141,7 +219,7 @@ static int16_t prv_get_cell_height(MenuLayer *menu_layer, MenuIndex *cell_index,
   if (cell_index->section == SECTION_FOOTER) {
     return FOOTER_ROW_HEIGHT;
   }
-  if (model_board()->count > 0) {
+  if (s_group_count > 0) {
     return ROW_HEIGHT;
   }
   // The empty state fills the screen, leaving the Obnovit row (when shown)
@@ -230,70 +308,39 @@ static void prv_draw_row(GContext *ctx, const Layer *cell_layer,
   const DepartureBoard *board = model_board();
   GRect bounds = layer_get_bounds(cell_layer);
 
-  if (board->count == 0) {
+  if (s_group_count == 0) {
     uint32_t icon;
     const char *text = prv_status_message(board, &icon);
     theme_draw_status(ctx, bounds, icon, text);
     return;
   }
 
-  const Departure *dep = &board->items[cell_index->row];
+  const Group *g = &s_groups[cell_index->row];
+  const Departure *first = &board->items[g->items[0]];
   bool highlighted = menu_cell_layer_is_highlighted(cell_layer);
+  GColor fg = highlighted ? GColorWhite : GColorBlack;
   int ox = prv_reveal_offset(cell_index->row, bounds.size.w);
+  int w = bounds.size.w - 2 * MARGIN;
 
-  // Top-left: colored line badge (padded off the top edge to breathe)
-  theme_draw_line_badge(ctx, GRect(MARGIN + ox, 5, LINE_BOX_W, 26), dep->line,
+  // Top: line badge, then the destination beside it
+  theme_draw_line_badge(ctx, GRect(MARGIN + ox, 3, LINE_BOX_W, 26), first->line,
                         highlighted);
-
-  // Top-right: relative countdown (leads); the absolute time follows small
-  // below. Past 60 min the countdown loses its edge, so show the clock instead.
-  int mins = theme_minutes_until(dep->time);
-  char big[16];
-  bool departed = false;
-  bool show_clock = false;  // small absolute time on the bottom row
-  if (mins == THEME_MIN_INVALID || mins >= 60) {
-    snprintf(big, sizeof(big), "%s", dep->time);
-  } else if (mins < 0) {
-    departed = true;
-    show_clock = true;
-    snprintf(big, sizeof(big), "%s", STR_DEPARTED);
-  } else if (mins == 0) {
-    show_clock = true;
-    snprintf(big, sizeof(big), "%s", STR_NOW);
-  } else {
-    show_clock = true;
-    snprintf(big, sizeof(big), STR_MIN_FMT, mins);
-  }
-
-  GColor big_color = highlighted ? GColorWhite
-                     : departed  ? PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
-                                 : prv_time_color(dep, highlighted);
-  GColor sub_color = highlighted ? GColorWhite
-                     : departed  ? PBL_IF_COLOR_ELSE(GColorDarkGray, GColorBlack)
-                                 : GColorBlack;
-
-  int right_x = MARGIN + LINE_BOX_W + 2;
-  graphics_context_set_text_color(ctx, big_color);
-  graphics_draw_text(ctx, big, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(right_x + ox, 1, bounds.size.w - right_x - MARGIN,
-                           28),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
-                     NULL);
-
-  // Bottom row: destination (left) + small absolute time (right)
-  int dest_w = bounds.size.w - 2 * MARGIN - (show_clock ? SMALL_TIME_W : 0);
-  graphics_context_set_text_color(ctx, sub_color);
-  graphics_draw_text(ctx, dep->dest, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                     GRect(MARGIN + ox, 30, dest_w, 22),
+  int dest_x = MARGIN + LINE_BOX_W + 4;
+  graphics_context_set_text_color(ctx, fg);
+  graphics_draw_text(ctx, first->dest,
+                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(dest_x + ox, 4, bounds.size.w - dest_x - MARGIN, 22),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft,
                      NULL);
-  if (show_clock) {
-    graphics_draw_text(ctx, dep->time, fonts_get_system_font(FONT_KEY_GOTHIC_18),
-                       GRect(bounds.size.w - MARGIN - SMALL_TIME_W + ox, 30,
-                             SMALL_TIME_W, 22),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
-                       NULL);
-  }
+
+  // Bottom: the next departures, right-aligned and leading the eye
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+  char times[48];
+  prv_format_times(g, font, w, times, sizeof(times));
+  graphics_context_set_text_color(ctx, prv_time_color(first, highlighted));
+  graphics_draw_text(ctx, times, font, GRect(MARGIN + ox, 22, w, 28),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentRight,
+                     NULL);
 }
 
 static void prv_refresh(void) {
@@ -308,11 +355,11 @@ static void prv_select_click(MenuLayer *menu_layer, MenuIndex *cell_index,
     prv_refresh();
     return;
   }
-  // Open the route of the tapped departure (downstream stops)
-  if (board->count == 0) {
+  // Open the route of the tapped line (downstream stops)
+  if (s_group_count == 0) {
     return;
   }
-  const Departure *dep = &board->items[cell_index->row];
+  const Departure *dep = &board->items[s_groups[cell_index->row].items[0]];
   trip_window_push(dep->line, dep->dest);
 }
 
@@ -324,6 +371,7 @@ static void prv_select_long_click(MenuLayer *menu_layer, MenuIndex *cell_index,
 
 static void prv_board_updated(void) {
   const DepartureBoard *board = model_board();
+  prv_regroup();
   // First rows of a fresh (non-offline) load just landed — cascade them in.
   if (s_prev_count == 0 && board->count > 0 &&
       !(board->flags & BOARD_FLAG_CACHED)) {
@@ -338,7 +386,26 @@ static void prv_board_updated(void) {
 
 // Re-render each minute so the countdowns keep ticking (including the offline
 // board, which counts down from its persisted times).
+static bool prv_board_stale(const DepartureBoard *board) {
+  if (board->loading || board->count == 0 || !board->stop_id[0] ||
+      (board->flags & BOARD_FLAG_CACHED)) {
+    return false;  // offline boards refresh only on request (footer tap)
+  }
+  int first = theme_minutes_until(board->items[0].time);
+  if (first != THEME_MIN_INVALID && first < 0) {
+    return true;
+  }
+  // Minutes until fetched_at: negative = its age; positive = wrapped past
+  // the next-day window, i.e. very old
+  int since = theme_minutes_until(board->fetched_at);
+  return since == THEME_MIN_INVALID || since <= -REFRESH_AFTER_MIN || since > 0;
+}
+
 static void prv_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
+  if (prv_board_stale(model_board())) {
+    comm_refresh_departures();
+  }
+  prv_regroup();
   if (s_menu_layer) {
     menu_layer_reload_data(s_menu_layer);
   }
@@ -375,6 +442,7 @@ static void prv_window_load(Window *window) {
 
   s_reveal = REVEAL_SPAN;
   s_prev_count = 0;
+  s_group_count = 0;
   comm_set_board_handler(prv_board_updated);
   tick_timer_service_subscribe(MINUTE_UNIT, prv_minute_tick);
 }

@@ -74,6 +74,10 @@ static void prv_handle_departures_header(DictionaryIterator *iter,
   // the Bluetooth-down path (which falls back with ERR_NETWORK instead).
   uint8_t err = error ? error->value->uint8 : ERR_NONE;
   if (err != ERR_NONE) {
+    if (board->silent) {
+      board->silent = false;  // keep the board on screen; it's still fresher
+      return;
+    }
     prv_departures_offline_fallback(err);
     return;
   }
@@ -94,7 +98,12 @@ static void prv_handle_departures_header(DictionaryIterator *iter,
   time_t now = time(NULL);
   strftime(board->fetched_at, TIME_LEN, "%H:%M", localtime(&now));
   board->loading = (board->error == ERR_NONE && board->expected > 0);
-  prv_notify_board();
+  if (!board->loading) {
+    board->silent = false;
+  }
+  if (!board->silent) {
+    prv_notify_board();
+  }
 }
 
 static void prv_handle_departures_row(DictionaryIterator *iter,
@@ -114,11 +123,15 @@ static void prv_handle_departures_row(DictionaryIterator *iter,
   }
   if (board->count >= board->expected) {
     board->loading = false;
+    board->silent = false;  // complete: the swap is one repaint below
     if (!(board->flags & BOARD_FLAG_CACHED)) {
       persist_store_board();  // fresh board — keep for offline fallback
     }
   }
   // Repaint on first row, completion, and every 4th row to limit flicker
+  if (board->silent) {
+    return;
+  }
   if (board->count == 1 || !board->loading || board->count % 4 == 0) {
     prv_notify_board();
   }
@@ -341,6 +354,17 @@ static bool prv_send_request_with_id(uint8_t op, const char *stop_id,
 
 static bool prv_send_request(uint8_t op, const char *stop_id) {
   return prv_send_request_with_id(op, stop_id, NULL, s_request_counter);
+}
+
+void comm_refresh_departures(void) {
+  DepartureBoard *board = model_board();
+  s_request_counter++;
+  board->request_id = s_request_counter;
+  board->silent = true;
+  if (!prv_send_request_with_id(OP_GET_DEPARTURES, board->stop_id,
+                                board->stop_name, s_request_counter)) {
+    board->silent = false;
+  }
 }
 
 static void prv_send_launch(void) {
