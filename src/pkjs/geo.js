@@ -24,7 +24,7 @@ function formatDist(m) {
   return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km';
 }
 
-// cb(errCode, stops[{id, name, dist}])
+// cb(errCode, stops[{id, name, dist, linky}])
 function findNearest(maxCount, cb) {
   if (!navigator.geolocation) {
     cb(appmsg.ERR.GPS);
@@ -43,6 +43,7 @@ function findNearest(maxCount, cb) {
           return {
             id: String(s.id),
             name: s.name,
+            linky: s.linky,
             m: haversine(lat, lon, s.lat, s.lng),
           };
         })
@@ -51,7 +52,12 @@ function findNearest(maxCount, cb) {
         })
         .slice(0, maxCount)
         .map(function (r) {
-          return { id: r.id, name: r.name, dist: formatDist(r.m) };
+          return {
+            id: r.id,
+            name: r.name,
+            dist: formatDist(r.m),
+            linky: r.linky,
+          };
         });
       cb(appmsg.ERR.NONE, nearest);
     });

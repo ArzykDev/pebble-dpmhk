@@ -60,6 +60,153 @@
           "name": "IMAGE_MENU_ICON",
           "file": "images/menu-icon.png",
           "menuIcon": true
+        },
+        {
+          "type": "raw",
+          "name": "ICON_STATUS_NO_CONNECTION",
+          "file": "images/status_no_connection.pdc",
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_STATUS_NO_CONNECTION",
+          "file": "images/status_no_connection-aplite.png",
+          "targetPlatforms": [
+            "aplite"
+          ]
+        },
+        {
+          "type": "raw",
+          "name": "ICON_STATUS_DISCONNECTED",
+          "file": "images/status_disconnected.pdc",
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_STATUS_DISCONNECTED",
+          "file": "images/status_disconnected-aplite.png",
+          "targetPlatforms": [
+            "aplite"
+          ]
+        },
+        {
+          "type": "raw",
+          "name": "ICON_STATUS_NO_DEPARTURES",
+          "file": "images/status_no_departures.pdc",
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_STATUS_NO_DEPARTURES",
+          "file": "images/status_no_departures-aplite.png",
+          "targetPlatforms": [
+            "aplite"
+          ]
+        },
+        {
+          "type": "raw",
+          "name": "ICON_STATUS_WARNING",
+          "file": "images/status_warning.pdc",
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_STATUS_WARNING",
+          "file": "images/status_warning-aplite.png",
+          "targetPlatforms": [
+            "aplite"
+          ]
+        },
+        {
+          "type": "raw",
+          "name": "ICON_SMALL_QUESTION",
+          "file": "images/small_question.pdc",
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_SMALL_QUESTION",
+          "file": "images/small_question-aplite.png",
+          "targetPlatforms": [
+            "aplite"
+          ]
+        },
+        {
+          "type": "raw",
+          "name": "ICON_SMALL_LOCATION",
+          "file": "images/small_location.pdc",
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_SMALL_LOCATION",
+          "file": "images/small_location-aplite.png",
+          "targetPlatforms": [
+            "aplite"
+          ]
+        },
+        {
+          "type": "raw",
+          "name": "ICON_SMALL_WARNING",
+          "file": "images/small_warning.pdc",
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "diorite",
+            "emery",
+            "flint",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "ICON_SMALL_WARNING",
+          "file": "images/small_warning-aplite.png",
+          "targetPlatforms": [
+            "aplite"
+          ]
         }
       ]
     }

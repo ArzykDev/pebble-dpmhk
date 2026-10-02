@@ -56,3 +56,13 @@ of [dpmhk.cz](https://dpmhk.cz)'s timetable search. It is undocumented and
 unaffiliated with this project; the app caches aggressively and degrades to
 cached data when it is unavailable. This app is not an official DPMHK
 product.
+
+## Icons
+
+The empty/error state icons in `resources/images/` (`status_*`, `small_*`) are
+the original PebbleOS system icons from
+[pebble-dev/iconography](https://github.com/pebble-dev/iconography)
+(Apache-2.0, © Pebble Technology Corp.), converted to PDC; the SVG
+sources are in `resources/icon-src/`. Polygons that
+repeated their first point were closed without the duplicate — the chalk
+firmware faults drawing such a filled path.

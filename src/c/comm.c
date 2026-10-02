@@ -129,6 +129,7 @@ static void prv_handle_stops_header(DictionaryIterator *iter, uint8_t op) {
     }
     if (expected == 0) {
       persist_store_favorites();
+      prv_notify_board();  // the board's favorite action row reflects this list
     }
   }
   prv_notify_stops();
@@ -161,17 +162,21 @@ static void prv_handle_stops_row(DictionaryIterator *iter, uint8_t op,
   }
 
   // Stops rows reuse the departure row keys:
-  // ROW_LINE = stop name, ROW_META = stop id, ROW_TIME = distance string
+  // ROW_LINE = stop name, ROW_META = stop id, ROW_TIME = distance string,
+  // ROW_DEST = served lines
   prv_copy_tuple_str(iter, MESSAGE_KEY_ROW_LINE, ref->name, NAME_LEN);
   prv_copy_tuple_str(iter, MESSAGE_KEY_ROW_META, ref->id, ID_LEN);
   ref->dist[0] = '\0';
   prv_copy_tuple_str(iter, MESSAGE_KEY_ROW_TIME, ref->dist, DIST_LEN);
+  ref->lines[0] = '\0';
+  prv_copy_tuple_str(iter, MESSAGE_KEY_ROW_DEST, ref->lines, LINES_LEN);
 
   if (op == OP_FAVORITES) {
     // Persist once the last pushed favorite arrived
     Tuple *count = dict_find(iter, MESSAGE_KEY_META_COUNT);
     if (count && stops->favorites_count >= count->value->uint8) {
       persist_store_favorites();
+      prv_notify_board();
     }
   }
   prv_notify_stops();
@@ -258,10 +263,17 @@ static void prv_inbox_dropped(AppMessageResult reason, void *context) {
   APP_LOG(APP_LOG_LEVEL_ERROR, "inbox dropped: %d", (int)reason);
 }
 
-// Phone unreachable (Bluetooth down) — fall back to the persisted last board,
-// or report a network error when none is stored.
+// A request that never left the watch: a dead phone link reads differently
+// from a transient outbox failure.
+static uint8_t prv_send_error(void) {
+  return connection_service_peek_pebble_app_connection() ? ERR_NETWORK
+                                                         : ERR_PHONE;
+}
+
+// Fall back to the persisted last board, or report the send error when none
+// is stored.
 static void prv_departures_send_failed(void) {
-  prv_departures_offline_fallback(ERR_NETWORK);
+  prv_departures_offline_fallback(prv_send_error());
 }
 
 static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason,
@@ -274,12 +286,12 @@ static void prv_outbox_failed(DictionaryIterator *iter, AppMessageResult reason,
   } else if (op == OP_GET_NEAREST) {
     StopsModel *stops = model_stops();
     stops->nearest_loading = false;
-    stops->nearest_error = ERR_NETWORK;
+    stops->nearest_error = prv_send_error();
     prv_notify_stops();
   } else if (op == OP_GET_TRIP) {
     TripModel *trip = model_trip();
     trip->loading = false;
-    trip->error = ERR_NETWORK;
+    trip->error = prv_send_error();
     prv_notify_trip();
   }
 }
@@ -323,7 +335,7 @@ void comm_request_departures(const char *stop_id, const char *stop_name) {
 static void prv_trip_send_failed(void) {
   TripModel *trip = model_trip();
   trip->loading = false;
-  trip->error = ERR_NETWORK;
+  trip->error = prv_send_error();
   prv_notify_trip();
 }
 
@@ -366,7 +378,7 @@ void comm_request_nearest(void) {
   prv_notify_stops();
   if (!prv_send_request(OP_GET_NEAREST, NULL)) {
     stops->nearest_loading = false;
-    stops->nearest_error = ERR_NETWORK;
+    stops->nearest_error = prv_send_error();
     prv_notify_stops();
   }
 }

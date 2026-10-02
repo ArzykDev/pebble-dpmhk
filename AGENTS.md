@@ -7,17 +7,16 @@ renders Czech diacritics natively — do NOT add custom fonts for this).
 
 ## Build / run / debug
 
-The Pebble emulator has broken deps on the Fedora host — run **all** pebble
-commands inside the `ubuntu` distrobox (shares $HOME; the
-`LD_PRELOAD libnxegl.so` warning there is harmless):
+Built against SDK 4.33.1 (pebble-tool 5.x); the SDK and emulator run natively
+on the Fedora host:
 
 ```sh
-distrobox enter ubuntu -- pebble build
-distrobox enter ubuntu -- pebble install --emulator basalt   # any of the 7 platforms
-distrobox enter ubuntu -- pebble logs                        # APP_LOG + JS console.log
-distrobox enter ubuntu -- pebble screenshot
-distrobox enter ubuntu -- pebble emu-button click down       # drive UI headlessly
-distrobox enter ubuntu -- pebble kill                        # stop emulators
+pebble build
+pebble install --emulator basalt   # any of the 7 platforms
+pebble logs                        # APP_LOG + JS console.log
+pebble screenshot
+pebble emu-button click down       # drive UI headlessly
+pebble kill                        # stop emulators
 ```
 
 After editing `messageKeys` in package.json run `pebble clean` once — the
@@ -28,12 +27,29 @@ so "nearest stops" rank against your IP location, not HK.
 Do NOT use `pebble emu-bt-connection --connected no` to test offline — it cuts
 pebble-tool's own control socket and you must `pebble kill` to recover.
 
+Agents/background work: run the emulator HEADLESS so no window opens on the
+desktop — `--vnc` replaces QEMU's SDL window, and stripping the display vars
+makes it impossible to open one even if a command forgets `--vnc`:
+`env -u DISPLAY -u WAYLAND_DISPLAY pebble install --emulator emery --vnc`
+(same prefix + `--vnc` for screenshot/emu-button/logs). If a stray QEMU holds
+VNC :1, `pkill -x qemu-pebble` (never `pkill -f`, it matches your own shell).
+
+Touch (emery, gabbro — `PBL_TOUCH`): `prv_init` opts in with
+`app_touch_navigation_enable(true)`; the system bridge then drives every
+MenuLayer (first tap focuses a row, a tap on the focused row = SELECT,
+vertical drag scrolls, swipe right = BACK). The bridge has NO long-press, so
+every long-press action also needs a tappable row (departures board ends with
+Obnovit / ★ Přidat-Odebrat). App recognizers never win while the
+bridge is live. Headless touch: launch with `--vnc` (pass it to EVERY pebble
+command, or the emulator relaunches without it) and drive the pointer, which
+QEMU maps to the touch panel 1:1 — hold ≥100 ms or the tap is missed:
+`uvx vncdotool -s 127.0.0.1::5901 move 100 145 mousedown 1 pause 0.15 mouseup 1`.
+
 ## CI & releasing
 
 GitHub Actions (`.github/workflows/pebble.yml`) builds all 7 platforms on every
 PR and push to `main` — a compile gate only (no test suite). `make build` wraps
-`pebble build`; on the Fedora host pass the box:
-`make build PEBBLE="distrobox enter ubuntu -- pebble"`.
+`pebble build` (override the binary with `PEBBLE=...`).
 
 Versioning is SemVer `MAJOR.MINOR.PATCH`, kept in `package.json` `version` and
 surfaced as the `.pbw` `versionLabel` (all three parts are preserved).
@@ -92,6 +108,11 @@ src/c/comm.c           ALL app_message_* usage; request/response protocol
 src/c/model.c|h        Departure/StopRef/DepartureBoard structs + static stores
 src/c/persist.c        watch storage: favorites mirror + last board (≤256 B/key)
 src/c/strings.h        every Czech UI string (UTF-8 literals)
+src/c/ui_theme.c       line colours/chips, star, system-icon empty states
+resources/images/      menu icon + PebbleOS status icons (.pdc; -aplite.png
+                       1-bit fallbacks — aplite can't draw PDC)
+resources/icon-src/    source SVGs of those icons; regenerate with PebbleOS
+                       tools/generate_pdcs (pdc_gen.py) + pdc2png
 src/c/windows/         stops_window (Oblíbené+Nejbližší), departures_window,
                        trip_window (downstream stops of a tapped departure)
 src/pkjs/index.js      'ready'/'appmessage' router + Clay wiring
@@ -124,11 +145,13 @@ Response (JS→watch): one header `{REQUEST_ID, OP, META_STOP_NAME?, META_COUNT,
 META_FLAGS, META_FETCHED_AT, ERROR}` then one message per row
 `{REQUEST_ID, OP, ROW_INDEX, ROW_LINE, ROW_DEST, ROW_TIME, ROW_DELAY}`,
 chained on send-success. Stops/favorites rows reuse keys: ROW_LINE=name,
-ROW_META=id, ROW_TIME=distance string. `REQUEST_ID` echoed everywhere; C drops
-mismatches. Omitted META_STOP_NAME keeps the watch's request-time name.
+ROW_META=id, ROW_TIME=distance string, ROW_DEST=served lines (space-joined,
+cut to 31 UTF-8 bytes = `LINES_LEN` - 1). `REQUEST_ID` echoed everywhere; C
+drops mismatches. Omitted META_STOP_NAME keeps the watch's request-time name.
 `ROW_DELAY` −32768 = unknown. META_FLAGS: bit0 cached, bit1 stale. ERROR:
-1 network, 2 API, 3 parse, 4 no packet, 5 GPS. Keep `comm.c`, `appmsg.js`, and
-`model.h` enums in sync when changing any of this.
+1 network, 2 API, 3 parse, 4 no packet, 5 GPS; 6 phone unreachable is
+watch-only (set by comm.c when a send fails with the phone link down). Keep
+`comm.c`, `appmsg.js`, and `model.h` enums in sync when changing any of this.
 
 ## Caching (live + offline fallback)
 
